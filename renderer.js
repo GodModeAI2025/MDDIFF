@@ -13,8 +13,6 @@ const state = {
 const els = {
   editorLeft:       document.getElementById('editorLeft'),
   editorRight:      document.getElementById('editorRight'),
-  highlightLeft:    document.getElementById('highlightLeft'),
-  highlightRight:   document.getElementById('highlightRight'),
   gutterLeft:       document.getElementById('gutterLeft'),
   gutterRight:      document.getElementById('gutterRight'),
   editorWrapperLeft:  document.getElementById('editorWrapperLeft'),
@@ -143,14 +141,15 @@ function computeDiff(a, b) {
   const la = a.split('\n'), lb = b.split('\n');
   const m = la.length, n = lb.length;
   const dp = Array.from({ length: m + 1 }, () => new Uint32Array(n + 1));
+  // Vergleiche Zeilen nach Trimmen (ignoriert Trailing-Whitespace)
   for (let i = 1; i <= m; i++)
     for (let j = 1; j <= n; j++)
-      dp[i][j] = la[i-1] === lb[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+      dp[i][j] = la[i-1].trimEnd() === lb[j-1].trimEnd() ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
 
   const res = [];
   let i = m, j = n;
   while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && la[i-1] === lb[j-1]) {
+    if (i > 0 && j > 0 && la[i-1].trimEnd() === lb[j-1].trimEnd()) {
       res.unshift({ type: 'eq', la: i, lb: j, text: la[i-1] }); i--; j--;
     } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
       res.unshift({ type: 'add', lb: j, text: lb[j-1] }); j--;
@@ -159,45 +158,6 @@ function computeDiff(a, b) {
     }
   }
   return res;
-}
-
-function wordDiff(oldLine, newLine) {
-  const oldWords = oldLine.split(/(\s+)/);
-  const newWords = newLine.split(/(\s+)/);
-  const m = oldWords.length, n = newWords.length;
-  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = oldWords[i-1] === newWords[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
-
-  const result = [];
-  let i = m, j = n;
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && oldWords[i-1] === newWords[j-1]) {
-      result.unshift({ type: 'eq', text: oldWords[i-1] }); i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-      result.unshift({ type: 'add', text: newWords[j-1] }); j--;
-    } else {
-      result.unshift({ type: 'del', text: oldWords[i-1] }); i--;
-    }
-  }
-  return result;
-}
-
-function renderWordDiffHtml(oldLine, newLine, side) {
-  const wd = wordDiff(oldLine, newLine);
-  let html = '';
-  for (const w of wd) {
-    const t = escapeHtml(w.text);
-    if (w.type === 'eq') {
-      html += t;
-    } else if (w.type === 'del' && side === 'left') {
-      html += `<span class="wd-del">${t}</span>`;
-    } else if (w.type === 'add' && side === 'right') {
-      html += `<span class="wd-add">${t}</span>`;
-    }
-  }
-  return html;
 }
 
 function getCachedDiff() {
@@ -339,52 +299,9 @@ function updateGutters() {
     }
   }
 
-  // Wort-Level-Diff-Paarungen speichern
-  const modPairs = {};
-  {
-    let j = 0;
-    while (j < diff.length) {
-      if (diff[j].type === 'eq') { j++; continue; }
-      const db = [];
-      while (j < diff.length && diff[j].type === 'del') { db.push(diff[j]); j++; }
-      const ab = [];
-      while (j < diff.length && diff[j].type === 'add') { ab.push(diff[j]); j++; }
-      const p = Math.min(db.length, ab.length);
-      for (let k = 0; k < p; k++) {
-        modPairs[`left:${db[k].la - 1}`] = ab[k].text;
-        modPairs[`right:${ab[k].lb - 1}`] = db[k].text;
-      }
-    }
-  }
-
   for (const side of SIDES) {
-    const { lines, statuses } = data[side];
-    el('gutter', side).innerHTML = buildLineSpans(lines.length, statuses, 'line-num');
-
-    // Highlight mit Wort-Level-Diff für modifizierte Zeilen
-    const showText = (side === 'left');
-    const hlParts = lines.map((line, idx) => {
-      const s = statuses[idx];
-      const text = showText ? escapeHtml(line) : '';
-
-      // Modifizierte Zeile: Wort-Level-Diff
-      if (s === 'mod' && modPairs[`${side}:${idx}`] !== undefined) {
-        const otherLine = modPairs[`${side}:${idx}`];
-        const wdHtml = renderWordDiffHtml(
-          side === 'left' ? line : otherLine,
-          side === 'right' ? line : otherLine,
-          side
-        );
-        return `<span class="hl-line hl-mod">${wdHtml}\n</span>`;
-      }
-
-      // Zeile nur auf dieser Seite → GRÜN (hat mehr)
-      if (s === 'add') return `<span class="hl-line hl-add">${text}\n</span>`;
-
-      // Unverändert
-      return `<span class="hl-line">${text}\n</span>`;
-    });
-    el('highlight', side).innerHTML = hlParts.join('');
+    const { statuses } = data[side];
+    el('gutter', side).innerHTML = buildLineSpans(data[side].lines.length, statuses, 'line-num');
   }
 
   const total = adds + dels + mods;
@@ -416,13 +333,8 @@ function setupEditorScrollSync() {
 
     other.scrollTop = ratio * (other.scrollHeight - other.clientHeight);
 
-    // Gutters
     els.gutterLeft.scrollTop = els.editorLeft.scrollTop;
     els.gutterRight.scrollTop = els.editorRight.scrollTop;
-
-    // Highlights per translateY
-    els.highlightLeft.style.transform = `translateY(${-els.editorLeft.scrollTop}px)`;
-    els.highlightRight.style.transform = `translateY(${-els.editorRight.scrollTop}px)`;
 
     requestAnimationFrame(() => { syncing = false; });
   }

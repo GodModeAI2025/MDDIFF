@@ -307,14 +307,14 @@
     }
 
     .line-gutter {
-      width: 58px;
+      width: 52px;
       flex-shrink: 0;
       background: var(--gutter-bg);
       border-right: 1px solid var(--border);
       overflow: hidden;
       user-select: none;
       font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1.6;
       padding-top: 8px;
     }
@@ -386,61 +386,15 @@
       color: var(--green);
     }
 
-    .editor-scroll {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-      min-width: 0;
-    }
-
-    .editor-highlight {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      padding: 8px 14px;
-      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      white-space: pre;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .hl-line {
-      display: block;
-      min-height: 1.6em;
-      margin: 0 -12px;
-      padding: 0 12px;
-    }
-
-    .hl-line.hl-add { background: var(--green-bg); border-left: 3px solid var(--green-bar); margin-left: -3px; padding-left: 3px; }
-    .hl-line.hl-del { background: var(--red-bg); border-left: 3px solid var(--red-bar); margin-left: -3px; padding-left: 3px; }
-    .hl-line.hl-mod { background: rgba(224, 175, 104, 0.12); border-left: 3px solid var(--yellow); margin-left: -3px; padding-left: 3px; }
-
-    /* Wort-Level-Diff: geänderte Wörter innerhalb einer Zeile */
-    .wd-del {
-      background: var(--red-bg-strong);
-      color: var(--red);
-      text-decoration: line-through;
-      border-radius: 2px;
-      padding: 0 2px;
-    }
-    .wd-add {
-      background: var(--green-bg-strong);
-      color: var(--green);
-      border-radius: 2px;
-      padding: 0 2px;
-      font-weight: 600;
-    }
-
     .editor-area {
-      position: relative;
-      width: 100%;
+      flex: 1;
+      width: 0;
       height: 100%;
-      background: transparent;
+      background: var(--bg-editor);
       color: var(--text);
       border: none;
       resize: none;
-      padding: 8px 14px;
+      padding: 8px 12px;
       font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
       font-size: 13px;
       line-height: 1.6;
@@ -449,21 +403,12 @@
       overflow-y: auto;
       overflow-x: auto;
       white-space: pre;
-      z-index: 1;
       caret-color: var(--accent);
     }
 
     .editor-area[readonly] {
-      color: transparent;
-      cursor: default;
-      caret-color: transparent;
-    }
-
-    /* Linke Seite: Highlight-Layer zeigt formatierten Text */
-    #editorWrapperLeft .editor-highlight {
       color: var(--text-muted);
-      z-index: 2;
-      pointer-events: none;
+      cursor: default;
     }
 
     /* ─── Preview ──────────────────────────────────────── */
@@ -598,10 +543,7 @@
       </div>
       <div class="editor-wrapper" id="editorWrapperLeft">
         <div class="line-gutter" id="gutterLeft"></div>
-        <div class="editor-scroll">
-          <div class="editor-highlight" id="highlightLeft"></div>
-          <textarea class="editor-area" id="editorLeft" placeholder="Original-Datei öffnen..." spellcheck="false" readonly></textarea>
-        </div>
+        <textarea class="editor-area" id="editorLeft" placeholder="Original-Datei öffnen..." spellcheck="false" readonly></textarea>
       </div>
       <div class="preview-wrapper" id="previewWrapperLeft">
         <div class="preview-gutter" id="previewGutterLeft"></div>
@@ -625,10 +567,7 @@
       </div>
       <div class="editor-wrapper" id="editorWrapperRight">
         <div class="line-gutter" id="gutterRight"></div>
-        <div class="editor-scroll">
-          <div class="editor-highlight" id="highlightRight"></div>
-          <textarea class="editor-area" id="editorRight" placeholder="Markdown eingeben oder Datei öffnen..." spellcheck="false"></textarea>
-        </div>
+        <textarea class="editor-area" id="editorRight" placeholder="Geänderte Datei öffnen oder bearbeiten..." spellcheck="false"></textarea>
       </div>
       <div class="preview-wrapper" id="previewWrapperRight">
         <div class="preview-gutter" id="previewGutterRight"></div>

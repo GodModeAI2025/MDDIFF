@@ -161,6 +161,45 @@ function computeDiff(a, b) {
   return res;
 }
 
+function wordDiff(oldLine, newLine) {
+  const oldWords = oldLine.split(/(\s+)/);
+  const newWords = newLine.split(/(\s+)/);
+  const m = oldWords.length, n = newWords.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = oldWords[i-1] === newWords[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+  const result = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldWords[i-1] === newWords[j-1]) {
+      result.unshift({ type: 'eq', text: oldWords[i-1] }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      result.unshift({ type: 'add', text: newWords[j-1] }); j--;
+    } else {
+      result.unshift({ type: 'del', text: oldWords[i-1] }); i--;
+    }
+  }
+  return result;
+}
+
+function renderWordDiffHtml(oldLine, newLine, side) {
+  const wd = wordDiff(oldLine, newLine);
+  let html = '';
+  for (const w of wd) {
+    const t = escapeHtml(w.text);
+    if (w.type === 'eq') {
+      html += t;
+    } else if (w.type === 'del' && side === 'left') {
+      html += `<span class="wd-del">${t}</span>`;
+    } else if (w.type === 'add' && side === 'right') {
+      html += `<span class="wd-add">${t}</span>`;
+    }
+  }
+  return html;
+}
+
 function getCachedDiff() {
   if (state.lastDiffGen === state.diffGen) return state.lastDiffResult;
   state.lastDiffGen = state.diffGen;
@@ -295,10 +334,47 @@ function updateGutters() {
     }
   }
 
+  // Wort-Level-Diff-Paarungen speichern
+  const modPairs = {};
+  {
+    let j = 0;
+    while (j < diff.length) {
+      if (diff[j].type === 'eq') { j++; continue; }
+      const db = [];
+      while (j < diff.length && diff[j].type === 'del') { db.push(diff[j]); j++; }
+      const ab = [];
+      while (j < diff.length && diff[j].type === 'add') { ab.push(diff[j]); j++; }
+      const p = Math.min(db.length, ab.length);
+      for (let k = 0; k < p; k++) {
+        modPairs[`left:${db[k].la - 1}`] = ab[k].text;
+        modPairs[`right:${ab[k].lb - 1}`] = db[k].text;
+      }
+    }
+  }
+
   for (const side of SIDES) {
     const { lines, statuses } = data[side];
     el('gutter', side).innerHTML = buildLineSpans(lines.length, statuses, 'line-num');
-    el('highlight', side).innerHTML = buildLineSpans(lines.length, statuses, 'hl-line');
+
+    // Highlight mit Wort-Level-Diff für modifizierte Zeilen
+    const hlParts = lines.map((line, idx) => {
+      const s = statuses[idx];
+      if ((s === 'mod-del' || s === 'mod-add') && modPairs[`${side}:${idx}`] !== undefined) {
+        const otherLine = modPairs[`${side}:${idx}`];
+        const wdHtml = renderWordDiffHtml(
+          s === 'mod-del' ? line : otherLine,
+          s === 'mod-add' ? line : otherLine,
+          side
+        );
+        const cls = s === 'mod-del' ? 'hl-del' : 'hl-add';
+        return `<span class="hl-line ${cls}">${wdHtml}\n</span>`;
+      }
+      let cls = '';
+      if (s === 'add' || s === 'mod-add') cls = 'hl-add';
+      else if (s === 'del' || s === 'mod-del') cls = 'hl-del';
+      return `<span class="hl-line ${cls}">\n</span>`;
+    });
+    el('highlight', side).innerHTML = hlParts.join('');
   }
 
   const totalAdds = adds + mods;

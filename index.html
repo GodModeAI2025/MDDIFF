@@ -16,14 +16,14 @@
       --accent: #7aa2f7;
       --accent-hover: #89b4fa;
       --green: #9ece6a;
-      --green-bg: rgba(158, 206, 106, 0.08);
-      --green-bg-strong: rgba(158, 206, 106, 0.18);
-      --green-gutter: rgba(158, 206, 106, 0.15);
+      --green-bg: rgba(158, 206, 106, 0.18);
+      --green-bg-strong: rgba(158, 206, 106, 0.30);
+      --green-gutter: rgba(158, 206, 106, 0.22);
       --green-bar: #9ece6a;
       --red: #f7768e;
-      --red-bg: rgba(247, 118, 142, 0.08);
-      --red-bg-strong: rgba(247, 118, 142, 0.18);
-      --red-gutter: rgba(247, 118, 142, 0.15);
+      --red-bg: rgba(247, 118, 142, 0.18);
+      --red-bg-strong: rgba(247, 118, 142, 0.30);
+      --red-gutter: rgba(247, 118, 142, 0.22);
       --red-bar: #f7768e;
       --yellow: #e0af68;
       --scrollbar: #2f3146;
@@ -46,14 +46,14 @@
       --accent: #2e5de0;
       --accent-hover: #4070f0;
       --green: #347d39;
-      --green-bg: rgba(52, 125, 57, 0.06);
-      --green-bg-strong: rgba(52, 125, 57, 0.15);
-      --green-gutter: rgba(52, 125, 57, 0.12);
+      --green-bg: rgba(52, 125, 57, 0.14);
+      --green-bg-strong: rgba(52, 125, 57, 0.25);
+      --green-gutter: rgba(52, 125, 57, 0.18);
       --green-bar: #347d39;
       --red: #cf222e;
-      --red-bg: rgba(207, 34, 46, 0.05);
-      --red-bg-strong: rgba(207, 34, 46, 0.12);
-      --red-gutter: rgba(207, 34, 46, 0.10);
+      --red-bg: rgba(207, 34, 46, 0.12);
+      --red-bg-strong: rgba(207, 34, 46, 0.22);
+      --red-gutter: rgba(207, 34, 46, 0.16);
       --red-bar: #cf222e;
       --yellow: #9a6700;
       --scrollbar: #c8c8d8;
@@ -307,7 +307,7 @@
     }
 
     .line-gutter {
-      width: 52px;
+      width: 58px;
       flex-shrink: 0;
       background: var(--gutter-bg);
       border-right: 1px solid var(--border);
@@ -323,38 +323,35 @@
       display: flex;
       align-items: center;
       justify-content: flex-end;
-      padding-right: 10px;
+      padding-right: 8px;
       color: var(--gutter-text);
       height: 1.6em;
       position: relative;
     }
 
-    /* Diff-Streifen im Gutter (4px Bar am rechten Rand) */
     .line-num.diff-add {
       background: var(--green-gutter);
-      color: var(--diff-add-text);
+      color: var(--green);
+      font-weight: 700;
     }
-    .line-num.diff-add::after {
+    .line-num.diff-add::before {
       content: '';
       position: absolute;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 3px;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
       background: var(--green-bar);
     }
 
     .line-num.diff-del {
       background: var(--red-gutter);
-      color: var(--diff-del-text);
+      color: var(--red);
+      font-weight: 700;
     }
-    .line-num.diff-del::after {
+    .line-num.diff-del::before {
       content: '';
       position: absolute;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 3px;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
       background: var(--red-bar);
     }
 
@@ -402,8 +399,24 @@
       padding: 0 12px;
     }
 
-    .hl-line.hl-add { background: var(--green-bg); border-left: 2px solid var(--green-bar); margin-left: -2px; }
-    .hl-line.hl-del { background: var(--red-bg); border-left: 2px solid var(--red-bar); margin-left: -2px; }
+    .hl-line.hl-add { background: var(--green-bg); border-left: 3px solid var(--green-bar); margin-left: -3px; padding-left: 3px; }
+    .hl-line.hl-del { background: var(--red-bg); border-left: 3px solid var(--red-bar); margin-left: -3px; padding-left: 3px; }
+
+    /* Wort-Level-Diff: geänderte Wörter innerhalb einer Zeile */
+    .wd-del {
+      background: var(--red-bg-strong);
+      color: var(--red);
+      text-decoration: line-through;
+      border-radius: 2px;
+      padding: 0 2px;
+    }
+    .wd-add {
+      background: var(--green-bg-strong);
+      color: var(--green);
+      border-radius: 2px;
+      padding: 0 2px;
+      font-weight: 600;
+    }
 
     .editor-area {
       position: relative;
@@ -427,8 +440,16 @@
     }
 
     .editor-area[readonly] {
-      color: var(--text-muted);
+      color: transparent;
       cursor: default;
+      caret-color: transparent;
+    }
+
+    /* Linke Seite: Highlight-Layer zeigt formatierten Text */
+    #editorWrapperLeft .editor-highlight {
+      color: var(--text-muted);
+      z-index: 2;
+      pointer-events: none;
     }
 
     /* ─── Preview ──────────────────────────────────────── */

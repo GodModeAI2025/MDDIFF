@@ -28,13 +28,19 @@ function buildMenu() {
       label: 'Datei',
       submenu: [
         {
-          label: 'Linke Datei öffnen…',
+          label: 'Zwei Dateien öffnen…',
           accelerator: 'CmdOrCtrl+O',
+          click: () => openTwoFiles()
+        },
+        { type: 'separator' },
+        {
+          label: 'Linke Datei öffnen…',
+          accelerator: 'CmdOrCtrl+Shift+O',
           click: () => openFile('left')
         },
         {
           label: 'Rechte Datei öffnen…',
-          accelerator: 'CmdOrCtrl+Shift+O',
+          accelerator: 'CmdOrCtrl+Alt+O',
           click: () => openFile('right')
         },
         { type: 'separator' },
@@ -96,6 +102,25 @@ async function openFile(side) {
   }
 }
 
+async function openTwoFiles() {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Zwei Markdown-Dateien zum Vergleichen auswählen',
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }],
+    properties: ['openFile', 'multiSelections']
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    const paths = result.filePaths.slice(0, 2);
+    const leftContent = fs.readFileSync(paths[0], 'utf-8');
+    mainWindow.webContents.send('file-opened', { side: 'left', filePath: paths[0], content: leftContent });
+
+    if (paths.length >= 2) {
+      const rightContent = fs.readFileSync(paths[1], 'utf-8');
+      mainWindow.webContents.send('file-opened', { side: 'right', filePath: paths[1], content: rightContent });
+    }
+  }
+}
+
 ipcMain.handle('open-file', async (_event, side) => {
   await openFile(side);
 });
@@ -126,6 +151,24 @@ ipcMain.handle('save-file-as', async (_event, { content }) => {
     return { success: true, filePath: result.filePath };
   }
   return { success: false };
+});
+
+ipcMain.handle('read-file', (_event, filePath) => {
+  try {
+    return { success: true, content: fs.readFileSync(filePath, 'utf-8') };
+  } catch { return { success: false }; }
+});
+
+const historyFile = path.join(app.getPath('userData'), 'compare-history.json');
+
+ipcMain.handle('load-history', () => {
+  try {
+    return JSON.parse(fs.readFileSync(historyFile, 'utf-8'));
+  } catch { return []; }
+});
+
+ipcMain.handle('save-history', (_event, history) => {
+  fs.writeFileSync(historyFile, JSON.stringify(history), 'utf-8');
 });
 
 app.whenReady().then(createWindow);

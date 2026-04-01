@@ -275,35 +275,37 @@ function updateDiffFileNames() {
   });
 }
 
-/* ─── Diff Edit Toggle (shared for source & preview) ────────────── */
-function setupDiffEditToggle(btnSelector, overlaySuffix, editorSuffix, renderFn) {
-  document.querySelectorAll(btnSelector).forEach(btn => {
-    btn.addEventListener('click', () => {
-      const side = btn.dataset.side;
-      const mode = btn.dataset.mode;
-      const overlay = els[`${overlaySuffix}${cap(side)}Overlay`];
-      const editor = els[`${editorSuffix}${cap(side)}`];
+/* ─── Diff Edit/View Toggle (global) ────────────────────────────── */
+function setDiffEditMode(editMode) {
+  ['left', 'right'].forEach(side => {
+    // Source diff
+    const srcOverlay = els[`diff${cap(side)}Overlay`];
+    const srcEditor = els[`diffEditor${cap(side)}`];
+    // Preview diff
+    const prvOverlay = els[`diffPreview${cap(side)}Overlay`];
+    const prvEditor = els[`diffPreviewEditor${cap(side)}`];
 
-      document.querySelectorAll(`${btnSelector}[data-side="${side}"]`).forEach(b => {
-        b.classList.toggle('active', b.dataset.mode === mode);
-      });
-
-      if (mode === 'edit') {
-        overlay.style.display = 'none';
-        editor.style.display = 'block';
-        editor.value = state[side].content;
-        editor.focus();
-      } else {
-        overlay.style.display = '';
-        editor.style.display = 'none';
-        renderFn();
-      }
-    });
+    if (editMode) {
+      srcOverlay.style.display = 'none';
+      srcEditor.style.display = 'block';
+      srcEditor.value = state[side].content;
+      prvOverlay.style.display = 'none';
+      prvEditor.style.display = 'block';
+      prvEditor.value = state[side].content;
+    } else {
+      srcOverlay.style.display = '';
+      srcEditor.style.display = 'none';
+      prvOverlay.style.display = '';
+      prvEditor.style.display = 'none';
+    }
   });
-}
 
-setupDiffEditToggle('.diff-edit-btn', 'diff', 'diffEditor', () => renderDiff(getCachedDiff()));
-setupDiffEditToggle('.diff-preview-edit-btn', 'diffPreview', 'diffPreviewEditor', () => renderDiffPreview(getCachedDiff()));
+  if (!editMode) {
+    const diff = getCachedDiff();
+    renderDiff(diff);
+    if (state.diffMode === 'preview') renderDiffPreview(diff);
+  }
+}
 
 /* ─── Diff Editor Input ─────────────────────────────────────────── */
 function setupDiffEditor(editorEl, side) {
@@ -387,7 +389,13 @@ function setMode(side, mode) {
 }
 
 document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => setMode(btn.dataset.side, btn.dataset.mode));
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    setMode('left', mode);
+    setMode('right', mode);
+    setDiffEditMode(mode === 'edit');
+  });
 });
 
 /* ─── View Toggle (Split / Diff) ────────────────────────────────── */
@@ -461,6 +469,7 @@ function loadContent(side, content, filePath, dirty) {
 /* ─── IPC ───────────────────────────────────────────────────────── */
 window.api.onFileOpened(({ side, filePath, content }) => {
   loadContent(side, content, filePath, false);
+  addToHistory();
 });
 
 window.api.onSaveFile(async (side) => {
@@ -499,6 +508,94 @@ window.api.onSaveFile(async (side) => {
   });
 });
 
+/* ─── History (letzte 5 Vergleiche) ─────────────────────────────── */
+let compareHistory = [];
+const historyBtn = document.getElementById('historyBtn');
+const historyDropdown = document.getElementById('historyDropdown');
+
+async function initHistory() {
+  compareHistory = await window.api.loadHistory() || [];
+}
+
+async function addToHistory() {
+  if (!state.left.filePath && !state.right.filePath) return;
+
+  const entry = {
+    left: state.left.filePath,
+    right: state.right.filePath,
+    time: Date.now()
+  };
+
+  compareHistory = compareHistory.filter(h =>
+    !(h.left === entry.left && h.right === entry.right)
+  );
+  compareHistory.unshift(entry);
+  compareHistory = compareHistory.slice(0, 5);
+  await window.api.saveHistory(compareHistory);
+}
+
+function renderHistory() {
+  if (compareHistory.length === 0) {
+    historyDropdown.innerHTML = '<div class="history-empty">Noch keine Vergleiche</div>';
+    return;
+  }
+
+  historyDropdown.innerHTML = compareHistory.map((h, i) => {
+    const left = h.left ? basename(h.left) : '—';
+    const right = h.right ? basename(h.right) : '—';
+    const ago = formatTimeAgo(h.time);
+    return `<div class="history-item" data-index="${i}">
+      <div class="history-files">
+        <div class="history-file left">${escapeHtml(left)}</div>
+        <div class="history-file right">${escapeHtml(right)}</div>
+      </div>
+      <span class="history-time">${ago}</span>
+    </div>`;
+  }).join('');
+}
+
+function formatTimeAgo(ts) {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'gerade eben';
+  if (mins < 60) return `vor ${mins} Min.`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `vor ${hours} Std.`;
+  const days = Math.floor(hours / 24);
+  return `vor ${days} Tag${days > 1 ? 'en' : ''}`;
+}
+
+historyBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  renderHistory();
+  historyDropdown.classList.toggle('open');
+});
+
+document.addEventListener('click', () => {
+  historyDropdown.classList.remove('open');
+});
+
+historyDropdown.addEventListener('click', async (e) => {
+  const item = e.target.closest('.history-item');
+  if (!item) return;
+
+  const idx = parseInt(item.dataset.index);
+  const entry = compareHistory[idx];
+  if (!entry) return;
+
+  historyDropdown.classList.remove('open');
+
+  for (const side of ['left', 'right']) {
+    if (entry[side]) {
+      const result = await window.api.readFile(entry[side]);
+      if (result.success) {
+        loadContent(side, result.content, entry[side], false);
+      }
+    }
+  }
+});
+
 /* ─── Init ──────────────────────────────────────────────────────── */
 setMode('left', 'edit');
 setMode('right', 'edit');
+initHistory();

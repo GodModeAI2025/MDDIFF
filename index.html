@@ -214,6 +214,15 @@
     .btn-save { display: none; }
     .btn-save.visible { display: inline-block; }
 
+    .btn-delta {
+      padding: 2px 6px;
+      font-size: 10px;
+      line-height: 1;
+      opacity: 0.4;
+    }
+    .btn-delta.has-target { opacity: 1; }
+    .btn-delta.has-target:hover { border-color: var(--accent); color: var(--accent); }
+
     /* ─── TOC (Inhaltsverzeichnis) ──────────────────── */
     .toc-wrapper { position: relative; }
 
@@ -453,6 +462,8 @@
           <button class="btn toc-btn" data-side="left" title="Inhaltsverzeichnis">&#9776;</button>
           <div class="toc-dropdown" id="tocLeft" data-side="left"></div>
         </div>
+        <button class="btn btn-delta" data-side="left" data-dir="prev" title="Vorheriges Delta">&#9650;</button>
+        <button class="btn btn-delta" data-side="left" data-dir="next" title="Nächstes Delta">&#9660;</button>
         <button class="btn btn-save" id="saveLeft">Speichern</button>
       </div>
       <div class="editor-wrapper" id="editorWrapperLeft">
@@ -477,6 +488,8 @@
           <button class="btn toc-btn" data-side="right" title="Inhaltsverzeichnis">&#9776;</button>
           <div class="toc-dropdown" id="tocRight" data-side="right"></div>
         </div>
+        <button class="btn btn-delta" data-side="right" data-dir="prev" title="Vorheriges Delta">&#9650;</button>
+        <button class="btn btn-delta" data-side="right" data-dir="next" title="Nächstes Delta">&#9660;</button>
         <button class="btn btn-save" id="saveRight">Speichern</button>
       </div>
       <div class="editor-wrapper" id="editorWrapperRight">

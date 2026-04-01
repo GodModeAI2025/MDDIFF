@@ -215,6 +215,8 @@ function updateGutters() {
   els.diffStats.innerHTML = adds || dels
     ? `<span class="add">+${adds}</span><span class="del">-${dels}</span>`
     : '';
+
+  updateDeltaButtons();
 }
 
 let gutterTimer = null;
@@ -508,6 +510,76 @@ function scrollToLine(side, lineIndex) {
   editor.focus();
   editor.setSelectionRange(pos, pos);
 }
+
+/* ─── Delta Navigation ────────────────────────────────────────── */
+function getDeltaLines(side) {
+  const diff = getCachedDiff();
+  const lines = [];
+  for (const e of diff) {
+    if (side === 'left' && e.type === 'del') lines.push(e.la - 1);
+    if (side === 'right' && e.type === 'add') lines.push(e.lb - 1);
+  }
+  return lines;
+}
+
+function getCurrentLine(side) {
+  const editor = el('editor', side);
+  const totalLines = (state[side].content || '').split('\n').length;
+  const ratio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight || 1);
+  return Math.round(ratio * (totalLines - 1));
+}
+
+function scrollBothSidesToLine(side, lineIndex) {
+  scrollToLine(side, lineIndex);
+
+  // Andere Seite synchron scrollen
+  const otherSide = side === 'left' ? 'right' : 'left';
+  const otherEditor = el('editor', otherSide);
+  const editor = el('editor', side);
+  requestAnimationFrame(() => {
+    const ratio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight || 1);
+    otherEditor.scrollTop = ratio * (otherEditor.scrollHeight - otherEditor.clientHeight);
+
+    if (state.preview) {
+      const preview = el('preview', side);
+      const otherPreview = el('preview', otherSide);
+      preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
+      otherPreview.scrollTop = ratio * (otherPreview.scrollHeight - otherPreview.clientHeight);
+    }
+  });
+}
+
+function updateDeltaButtons() {
+  document.querySelectorAll('.btn-delta').forEach(btn => {
+    const side = btn.dataset.side;
+    const deltas = getDeltaLines(side);
+    btn.classList.toggle('has-target', deltas.length > 0);
+  });
+}
+
+document.querySelectorAll('.btn-delta').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const side = btn.dataset.side;
+    const dir = btn.dataset.dir;
+    const deltas = getDeltaLines(side);
+    if (!deltas.length) return;
+
+    const current = getCurrentLine(side);
+    let target;
+
+    if (dir === 'next') {
+      target = deltas.find(l => l > current + 1);
+      if (target === undefined) target = deltas[0];
+    } else {
+      for (let i = deltas.length - 1; i >= 0; i--) {
+        if (deltas[i] < current - 1) { target = deltas[i]; break; }
+      }
+      if (target === undefined) target = deltas[deltas.length - 1];
+    }
+
+    scrollBothSidesToLine(side, target);
+  });
+});
 
 document.querySelectorAll('.toc-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {

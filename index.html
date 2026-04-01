@@ -355,6 +355,19 @@
       background: var(--red-bar);
     }
 
+    .line-num.diff-mod {
+      background: rgba(224, 175, 104, 0.15);
+      color: var(--yellow);
+      font-weight: 700;
+    }
+    .line-num.diff-mod::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--yellow);
+    }
+
     .panel-label {
       font-size: 9px;
       font-weight: 700;
@@ -401,6 +414,7 @@
 
     .hl-line.hl-add { background: var(--green-bg); border-left: 3px solid var(--green-bar); margin-left: -3px; padding-left: 3px; }
     .hl-line.hl-del { background: var(--red-bg); border-left: 3px solid var(--red-bar); margin-left: -3px; padding-left: 3px; }
+    .hl-line.hl-mod { background: rgba(224, 175, 104, 0.12); border-left: 3px solid var(--yellow); margin-left: -3px; padding-left: 3px; }
 
     /* Wort-Level-Diff: geänderte Wörter innerhalb einer Zeile */
     .wd-del {
@@ -537,6 +551,11 @@
       text-decoration: line-through;
       text-decoration-color: var(--red);
       opacity: 0.6;
+    }
+
+    .diff-tr-modified td, .diff-tr-modified th {
+      background: rgba(224, 175, 104, 0.12);
+      border-left: 2px solid var(--yellow);
     }
 
     /* ─── Scrollbar ─────────────────────────────────────── */

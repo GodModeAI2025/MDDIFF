@@ -55,13 +55,15 @@ function buildLineSpans(count, statuses, prefix) {
     const s = statuses[i];
     if (prefix === 'line-num') {
       let marker = '', cls = '';
-      if (s === 'add' || s === 'mod-add') { marker = '+'; cls = 'diff-add'; }
-      else if (s === 'del' || s === 'mod-del') { marker = '-'; cls = 'diff-del'; }
+      if (s === 'add') { marker = '+'; cls = 'diff-add'; }
+      else if (s === 'del') { marker = '-'; cls = 'diff-del'; }
+      else if (s === 'mod') { marker = '~'; cls = 'diff-mod'; }
       parts[i] = `<span class="${prefix} ${cls}">${marker}${i + 1}</span>`;
     } else {
       let cls = '';
-      if (s === 'add' || s === 'mod-add') cls = 'hl-add';
-      else if (s === 'del' || s === 'mod-del') cls = 'hl-del';
+      if (s === 'add') cls = 'hl-add';
+      else if (s === 'del') cls = 'hl-del';
+      else if (s === 'mod') cls = 'hl-mod';
       parts[i] = `<span class="${prefix} ${cls}">\n</span>`;
     }
   }
@@ -222,8 +224,8 @@ function renderPreviewWithDiff(side) {
     while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
     const paired = Math.min(delBlock.length, addBlock.length);
     for (let p = 0; p < paired; p++) {
-      if (side === 'left') statuses[delBlock[p].la - 1] = 'mod-del';
-      if (side === 'right') statuses[addBlock[p].lb - 1] = 'mod-add';
+      if (side === 'left') statuses[delBlock[p].la - 1] = 'mod';
+      if (side === 'right') statuses[addBlock[p].lb - 1] = 'mod';
     }
     for (let p = paired; p < delBlock.length; p++) {
       if (side === 'left') statuses[delBlock[p].la - 1] = 'del';
@@ -256,8 +258,9 @@ function renderPreviewWithDiff(side) {
     }
 
     if (inTable) inTable = false;
-    if (statuses[i] === 'add' || statuses[i] === 'mod-add') return '\x00DA\x00' + line + '\x00/DA\x00';
-    if (statuses[i] === 'del' || statuses[i] === 'mod-del') return '\x00DD\x00' + line + '\x00/DD\x00';
+    if (statuses[i] === 'add') return '\x00DA\x00' + line + '\x00/DA\x00';
+    if (statuses[i] === 'del') return '\x00DD\x00' + line + '\x00/DD\x00';
+    if (statuses[i] === 'mod') return '\x00DM\x00' + line + '\x00/DM\x00';
     return line;
   });
 
@@ -279,7 +282,8 @@ function renderPreviewWithDiff(side) {
       if (tables[d.table]) {
         const rows = tables[d.table].querySelectorAll('tr');
         if (rows[d.row]) {
-          rows[d.row].classList.add('diff-tr-added');
+          const cls = d.status === 'add' ? 'diff-tr-added' : d.status === 'del' ? 'diff-tr-removed' : 'diff-tr-modified';
+          rows[d.row].classList.add(cls);
         }
       }
     }
@@ -316,12 +320,12 @@ function updateGutters() {
     // del+add Paare = Modifikation (gelb ~)
     const paired = Math.min(delBlock.length, addBlock.length);
     for (let p = 0; p < paired; p++) {
-      data.left.statuses[delBlock[p].la - 1] = 'mod-del';
-      data.right.statuses[addBlock[p].lb - 1] = 'mod-add';
+      data.left.statuses[delBlock[p].la - 1] = 'mod';
+      data.right.statuses[addBlock[p].lb - 1] = 'mod';
       mods++;
     }
 
-    // Übrige del = reine Löschung (rot -)
+    // Übrige del = reine Löschung (rot auf links)
     for (let p = paired; p < delBlock.length; p++) {
       data.left.statuses[delBlock[p].la - 1] = 'del';
       dels++;
@@ -357,22 +361,30 @@ function updateGutters() {
     el('gutter', side).innerHTML = buildLineSpans(lines.length, statuses, 'line-num');
 
     // Highlight mit Wort-Level-Diff für modifizierte Zeilen
+    const showText = (side === 'left');
     const hlParts = lines.map((line, idx) => {
       const s = statuses[idx];
-      if ((s === 'mod-del' || s === 'mod-add') && modPairs[`${side}:${idx}`] !== undefined) {
+      const text = showText ? escapeHtml(line) : '';
+
+      // Modifizierte Zeile: Wort-Level-Diff
+      if (s === 'mod' && modPairs[`${side}:${idx}`] !== undefined) {
         const otherLine = modPairs[`${side}:${idx}`];
         const wdHtml = renderWordDiffHtml(
-          s === 'mod-del' ? line : otherLine,
-          s === 'mod-add' ? line : otherLine,
+          side === 'left' ? line : otherLine,
+          side === 'right' ? line : otherLine,
           side
         );
-        const cls = s === 'mod-del' ? 'hl-del' : 'hl-add';
-        return `<span class="hl-line ${cls}">${wdHtml}\n</span>`;
+        return `<span class="hl-line hl-mod">${wdHtml}\n</span>`;
       }
-      let cls = '';
-      if (s === 'add' || s === 'mod-add') cls = 'hl-add';
-      else if (s === 'del' || s === 'mod-del') cls = 'hl-del';
-      return `<span class="hl-line ${cls}">\n</span>`;
+
+      // Gelöschte Zeile (nur links)
+      if (s === 'del') return `<span class="hl-line hl-del">${text}\n</span>`;
+
+      // Neue Zeile (nur rechts)
+      if (s === 'add') return `<span class="hl-line hl-add">${text}\n</span>`;
+
+      // Unverändert
+      return `<span class="hl-line">${text}\n</span>`;
     });
     el('highlight', side).innerHTML = hlParts.join('');
   }

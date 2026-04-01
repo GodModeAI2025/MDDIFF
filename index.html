@@ -214,6 +214,61 @@
     .btn-save { display: none; }
     .btn-save.visible { display: inline-block; }
 
+    /* ─── TOC (Inhaltsverzeichnis) ──────────────────── */
+    .toc-wrapper { position: relative; }
+
+    .toc-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 240px;
+      max-width: 360px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      z-index: 100;
+    }
+    .toc-dropdown.open { display: block; }
+
+    .toc-item {
+      display: block;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: background 0.1s;
+    }
+    .toc-item:last-child { border-bottom: none; }
+    .toc-item:hover { background: var(--bg-toolbar); }
+    .toc-item.toc-h1 { padding-left: 12px; font-weight: 600; }
+    .toc-item.toc-h2 { padding-left: 24px; }
+    .toc-item.toc-h3 { padding-left: 36px; font-size: 11px; }
+    .toc-item.toc-h4 { padding-left: 48px; font-size: 11px; color: var(--text-muted); }
+    .toc-item.toc-h5 { padding-left: 56px; font-size: 11px; color: var(--text-muted); }
+    .toc-item.toc-h6 { padding-left: 64px; font-size: 11px; color: var(--text-muted); }
+
+    .toc-item .toc-line {
+      color: var(--text-muted);
+      font-size: 10px;
+      margin-left: 6px;
+    }
+
+    .toc-empty {
+      padding: 12px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
     /* ─── Editor with Line Numbers ──────────────────── */
     .editor-wrapper {
       flex: 1;
@@ -394,6 +449,10 @@
       <div class="panel-toolbar">
         <button class="btn btn-accent" onclick="api.openFile('left')">Öffnen</button>
         <span class="file-name" id="fileNameLeft">Keine Datei</span>
+        <div class="toc-wrapper">
+          <button class="btn toc-btn" data-side="left" title="Inhaltsverzeichnis">&#9776;</button>
+          <div class="toc-dropdown" id="tocLeft"></div>
+        </div>
         <button class="btn btn-save" id="saveLeft">Speichern</button>
       </div>
       <div class="editor-wrapper" id="editorWrapperLeft">
@@ -414,6 +473,10 @@
       <div class="panel-toolbar">
         <button class="btn btn-accent" onclick="api.openFile('right')">Öffnen</button>
         <span class="file-name" id="fileNameRight">Keine Datei</span>
+        <div class="toc-wrapper">
+          <button class="btn toc-btn" data-side="right" title="Inhaltsverzeichnis">&#9776;</button>
+          <div class="toc-dropdown" id="tocRight"></div>
+        </div>
         <button class="btn btn-save" id="saveRight">Speichern</button>
       </div>
       <div class="editor-wrapper" id="editorWrapperRight">

@@ -432,5 +432,85 @@ els.historyDropdown.addEventListener('click', async (e) => {
 /* ─── Init ────────────────────────────────────────────────────── */
 document.getElementById('openTwoBtn').addEventListener('click', () => window.api.openTwoFiles());
 
+/* ─── TOC (Inhaltsverzeichnis) ────────────────────────────────── */
+function buildToc(side) {
+  const lines = (state[side].content || '').split('\n');
+  const headings = [];
+  let inCodeBlock = false;
+
+  lines.forEach((line, i) => {
+    if (line.trimStart().startsWith('```')) inCodeBlock = !inCodeBlock;
+    if (inCodeBlock) return;
+    const match = line.match(/^(#{1,6})\s+(.+)$/);
+    if (match) {
+      headings.push({ level: match[1].length, text: match[2], line: i });
+    }
+  });
+
+  const dropdown = document.getElementById(`toc${cap(side)}`);
+  if (!headings.length) {
+    dropdown.innerHTML = '<div class="toc-empty">Keine Überschriften</div>';
+    return;
+  }
+
+  dropdown.innerHTML = headings.map(h =>
+    `<div class="toc-item toc-h${h.level}" data-line="${h.line}">` +
+    `${escapeHtml(h.text)}<span class="toc-line">:${h.line + 1}</span></div>`
+  ).join('');
+}
+
+function scrollToLine(side, lineIndex) {
+  const editor = el('editor', side);
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight);
+  editor.scrollTop = lineIndex * lineHeight;
+  // Cursor an den Zeilenanfang setzen
+  const lines = editor.value.split('\n');
+  let pos = 0;
+  for (let i = 0; i < lineIndex && i < lines.length; i++) pos += lines[i].length + 1;
+  editor.focus();
+  editor.setSelectionRange(pos, pos);
+}
+
+// TOC button clicks
+document.querySelectorAll('.toc-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const side = btn.dataset.side;
+    // Close other TOC
+    document.querySelectorAll('.toc-dropdown').forEach(d => {
+      if (d.id !== `toc${cap(side)}`) d.classList.remove('open');
+    });
+    buildToc(side);
+    document.getElementById(`toc${cap(side)}`).classList.toggle('open');
+  });
+});
+
+// TOC item clicks
+document.querySelectorAll('.toc-dropdown').forEach(dropdown => {
+  dropdown.addEventListener('click', (e) => {
+    const item = e.target.closest('.toc-item');
+    if (!item) return;
+    const lineIndex = parseInt(item.dataset.line);
+    const side = dropdown.id.replace('toc', '').toLowerCase();
+    dropdown.classList.remove('open');
+
+    if (state.preview) {
+      // In Preview: scroll to heading element
+      const preview = el('preview', side);
+      const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      const tocItems = Array.from(dropdown.querySelectorAll('.toc-item'));
+      const idx = tocItems.indexOf(item);
+      if (headings[idx]) headings[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      scrollToLine(side, lineIndex);
+    }
+  });
+});
+
+// Close TOC on outside click
+document.addEventListener('click', () => {
+  document.querySelectorAll('.toc-dropdown').forEach(d => d.classList.remove('open'));
+});
+
 updateGutters();
 initHistory();

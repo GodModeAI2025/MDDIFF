@@ -6,15 +6,15 @@
   <title>MDDIFF – Markdown Diff Editor</title>
   <style>
     :root {
-      --bg: #1e1e2e;
-      --bg-card: #252536;
-      --border: #3a3a5c;
-      --text: #cdd6f4;
-      --text-muted: #6c7086;
-      --accent: #89b4fa;
-      --accent-hover: #74c7ec;
-      --green: #a6e3a1;
-      --red: #f38ba8;
+      --bg: #1a1b26;
+      --bg-card: #1f2133;
+      --border: #2f3146;
+      --text: #c0caf5;
+      --text-muted: #565f89;
+      --accent: #7aa2f7;
+      --accent-hover: #89b4fa;
+      --green: #9ece6a;
+      --red: #f7768e;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,7 +29,7 @@
     .hero {
       text-align: center;
       padding: 80px 20px 60px;
-      background: linear-gradient(180deg, #252536 0%, var(--bg) 100%);
+      background: linear-gradient(180deg, #1f2133 0%, var(--bg) 100%);
     }
 
     .hero h1 {
@@ -158,7 +158,7 @@
       align-items: center;
       gap: 8px;
       padding: 12px 16px;
-      background: #2a2a3e;
+      background: #24253a;
       border-bottom: 1px solid var(--border);
     }
 
@@ -167,8 +167,24 @@
       border-radius: 50%;
     }
     .demo-dot.r { background: var(--red); }
-    .demo-dot.y { background: #f9e2af; }
+    .demo-dot.y { background: #e0af68; }
     .demo-dot.g { background: var(--green); }
+
+    .demo-labels {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .demo-label {
+      flex: 1;
+      padding: 6px 16px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .demo-label.orig { color: var(--red); background: rgba(247, 118, 142, 0.08); }
+    .demo-label.mod { color: var(--green); background: rgba(158, 206, 106, 0.08); border-left: 1px solid var(--border); }
 
     .demo-body {
       display: flex;
@@ -186,8 +202,9 @@
     .demo-side:first-child { border-right: 1px solid var(--border); }
 
     .demo-line { padding: 2px 0; }
-    .demo-line.removed { color: var(--red); background: rgba(243,139,168,0.08); }
-    .demo-line.added { color: var(--green); background: rgba(166,227,161,0.08); }
+    .demo-line.added { color: var(--green); }
+    .demo-line .gutter { color: var(--text-muted); display: inline-block; width: 36px; text-align: right; margin-right: 12px; opacity: 0.5; }
+    .demo-line.added .gutter { color: var(--green); opacity: 1; font-weight: 700; }
     .demo-line.normal { color: var(--text-muted); }
 
     .install {
@@ -240,7 +257,7 @@
 
   <div class="hero">
     <h1><span class="accent">MD</span>DIFF</h1>
-    <p class="tagline">Side-by-side Markdown Diff Editor for macOS</p>
+    <p class="tagline">Markdown Diff Editor for macOS</p>
     <div class="buttons">
       <a href="https://github.com/GodModeAI2025/MDDIFF/releases" class="btn btn-primary">
         Download for Mac (Apple Silicon)
@@ -257,65 +274,70 @@
       <h2>Features</h2>
       <div class="feature-grid">
         <div class="feature-card">
-          <div class="icon">&#x1F4C4;&#x21C4;&#x1F4C4;</div>
-          <h3>Split View</h3>
-          <p>Open two Markdown files side by side. Edit both simultaneously with full editor support.</p>
+          <div class="icon"><span style="color:var(--green)">+</span></div>
+          <h3>Always-on Diff</h3>
+          <p>Original (read-only) vs. modified (editable) side by side. Lines unique to each side highlighted in green.</p>
         </div>
         <div class="feature-card">
-          <div class="icon"><span style="color:var(--green)">+</span> <span style="color:var(--red)">&minus;</span></div>
-          <h3>Git-style Diff</h3>
-          <p>Line-by-line comparison with color-coded additions and deletions, just like git diff.</p>
+          <div class="icon">&#x1F4CD;</div>
+          <h3>Cursor Sync</h3>
+          <p>Moving the cursor on the right highlights the corresponding original line on the left. Line-synced scrolling.</p>
         </div>
         <div class="feature-card">
           <div class="icon">&#x1F441;</div>
-          <h3>Diff Preview</h3>
-          <p>View diffs as rendered Markdown with highlighted changes, not just raw source.</p>
+          <h3>Markdown Preview</h3>
+          <p>Toggle rendered preview with diff markers preserved. Tables, code blocks, headings all rendered.</p>
         </div>
         <div class="feature-card">
-          <div class="icon">&#x1F4DD;</div>
-          <h3>Edit & Preview</h3>
-          <p>Toggle each panel between edit mode and rendered Markdown preview independently.</p>
+          <div class="icon">&#x1F4D1;</div>
+          <h3>Table of Contents</h3>
+          <p>Navigate headings via dropdown. Click to jump to the section in editor or preview.</p>
         </div>
         <div class="feature-card">
-          <div class="icon">&#x1F503;</div>
-          <h3>Synced Scroll</h3>
-          <p>Both panels scroll in sync &mdash; in editor, preview, and diff view.</p>
+          <div class="icon">&#x25B2;&#x25BC;</div>
+          <h3>Delta Navigation</h3>
+          <p>Jump between changes with arrow buttons. Both sides scroll to the corresponding position.</p>
         </div>
         <div class="feature-card">
-          <div class="icon">&#x1F3AF;</div>
-          <h3>MD Only</h3>
-          <p>Purpose-built for Markdown. File dialogs filter for .md files. Drag &amp; drop supported.</p>
+          <div class="icon">&#x1F4BE;</div>
+          <h3>History & Save</h3>
+          <p>Last 5 comparisons stored. Save modified file. Dark/light theme. Drag &amp; drop support.</p>
         </div>
       </div>
     </section>
 
     <section class="demo">
       <h2>How it looks</h2>
-      <p>Git-style side-by-side diff with line numbers</p>
+      <p>Original vs. modified with green markers for unique lines</p>
       <div class="demo-window">
         <div class="demo-titlebar">
           <div class="demo-dot r"></div>
           <div class="demo-dot y"></div>
           <div class="demo-dot g"></div>
         </div>
+        <div class="demo-labels">
+          <div class="demo-label orig">Original</div>
+          <div class="demo-label mod">Ge&auml;ndert</div>
+        </div>
         <div class="demo-body">
           <div class="demo-side">
-            <div class="demo-line normal">&nbsp;&nbsp;# Project Readme</div>
-            <div class="demo-line normal">&nbsp;&nbsp;</div>
-            <div class="demo-line removed">- Version: 1.0.0</div>
-            <div class="demo-line normal">&nbsp;&nbsp;A great tool for comparing</div>
-            <div class="demo-line removed">- markdown documents easily.</div>
-            <div class="demo-line normal">&nbsp;&nbsp;</div>
-            <div class="demo-line normal">&nbsp;&nbsp;## Installation</div>
+            <div class="demo-line normal"><span class="gutter">1</span># Project Readme</div>
+            <div class="demo-line normal"><span class="gutter">2</span></div>
+            <div class="demo-line added"><span class="gutter">+3</span>Version: 1.0.0</div>
+            <div class="demo-line normal"><span class="gutter">4</span>A great tool for comparing</div>
+            <div class="demo-line added"><span class="gutter">+5</span>markdown documents easily.</div>
+            <div class="demo-line normal"><span class="gutter">6</span></div>
+            <div class="demo-line normal"><span class="gutter">7</span>## Installation</div>
           </div>
           <div class="demo-side">
-            <div class="demo-line normal">&nbsp;&nbsp;# Project Readme</div>
-            <div class="demo-line normal">&nbsp;&nbsp;</div>
-            <div class="demo-line added">+ Version: 2.0.0</div>
-            <div class="demo-line normal">&nbsp;&nbsp;A great tool for comparing</div>
-            <div class="demo-line added">+ Markdown documents with style.</div>
-            <div class="demo-line normal">&nbsp;&nbsp;</div>
-            <div class="demo-line normal">&nbsp;&nbsp;## Installation</div>
+            <div class="demo-line normal"><span class="gutter">1</span># Project Readme</div>
+            <div class="demo-line normal"><span class="gutter">2</span></div>
+            <div class="demo-line added"><span class="gutter">+3</span>Version: 2.0.0</div>
+            <div class="demo-line normal"><span class="gutter">4</span>A great tool for comparing</div>
+            <div class="demo-line added"><span class="gutter">+5</span>Markdown documents with style.</div>
+            <div class="demo-line added"><span class="gutter">+6</span>Now with diff highlighting!</div>
+            <div class="demo-line normal"><span class="gutter">7</span></div>
+            <div class="demo-line normal"><span class="gutter">8</span>## Installation</div>
           </div>
         </div>
       </div>

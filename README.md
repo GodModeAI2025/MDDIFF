@@ -1,19 +1,34 @@
 # MDDIFF – Markdown Diff Editor
 
-A side-by-side Markdown diff editor built with Electron. Compare, edit, and preview two Markdown files with Git-style diff highlighting.
-
-![MDDIFF Screenshot](screenshot.png)
+Side-by-side Markdown comparison tool built with Electron. Compare an original against a modified version with clear diff highlighting.
 
 ## Features
 
-- **Split View** – Two Markdown files side by side
-- **Git-style Diff** – Line-by-line comparison with additions (green) and deletions (red)
-- **Diff Preview** – Toggle between raw source diff and rendered Markdown diff with visual markers
-- **Live Preview** – Switch each panel between edit mode and rendered Markdown preview
-- **Synchronized Scrolling** – Left and right panels scroll in sync (editor, preview, and diff)
-- **Drag & Drop** – Drop `.md` files directly into either panel
-- **MD-only** – File dialogs filter for Markdown files (`.md`, `.markdown`, `.mdown`, `.mkd`)
-- **Dark Theme** – Catppuccin-inspired dark UI
+- **Always-on Diff** – Original (left, read-only) vs. Modified (right, editable) side by side
+- **Green (+) Highlighting** – Lines unique to each side are marked with green gutter indicators
+- **Cursor Sync** – Moving the cursor on the right highlights the corresponding line in the left gutter
+- **Line-synced Scrolling** – Right scroll maps to the matching original line on the left
+- **Markdown Preview** – Toggle rendered preview with diff markers preserved
+- **Table of Contents** – Navigate headings via dropdown per panel
+- **Delta Navigation** – Jump between changes with arrow buttons
+- **Compare History** – Last 5 comparisons stored, reload with one click
+- **Two-file Open** – Select two files at once for quick comparison
+- **Save** – Save modified file (right side only)
+- **Dark / Light Theme** – Toggle in top bar
+- **Drag & Drop** – Drop `.md` files into either panel
+- **Whitespace-tolerant** – Trailing whitespace ignored in comparison
+
+## Layout
+
+```
+[History] [2 Dateien öffnen] | [Vorschau] [+N Unterschiede] [Theme]
+┌─────────────────────────┬─────────────────────────┐
+│ ORIGINAL (read-only)    │ GEAENDERT (editable)    │
+│ Gutter with line nums   │ Gutter with +N markers  │
+│ Cursor-line indicator   │ Editor textarea         │
+│ TOC | Delta nav         │ TOC | Delta nav | Save  │
+└─────────────────────────┴─────────────────────────┘
+```
 
 ## Installation
 
@@ -21,7 +36,7 @@ A side-by-side Markdown diff editor built with Electron. Compare, edit, and prev
 
 Download the latest `.dmg` from [Releases](https://github.com/GodModeAI2025/MDDIFF/releases).
 
-> Since the app is not notarized, right-click > **Open** on first launch, or run:
+> First launch: right-click > **Open**, or run:
 > ```bash
 > xattr -cr /Applications/MDDIFF.app
 > ```
@@ -45,16 +60,16 @@ npm run build       # DMG for Apple Silicon
 
 | Action | Shortcut |
 |---|---|
-| Open left file | `Cmd+O` |
-| Open right file | `Cmd+Shift+O` |
-| Save left file | `Cmd+S` |
-| Save right file | `Cmd+Shift+S` |
+| Open two files | `Cmd+O` |
+| Open left file | `Cmd+Shift+O` |
+| Open right file | `Cmd+Alt+O` |
+| Save right file | `Cmd+S` |
 
 ## Tech Stack
 
 - [Electron](https://www.electronjs.org/) – Desktop runtime
-- Pure HTML/CSS/JS – No framework dependencies in the renderer
-- LCS-based diff algorithm – Built-in, no external diff library needed at runtime
+- Pure HTML/CSS/JS – No framework dependencies
+- LCS-based diff algorithm with whitespace trimming
 
 ## License
 

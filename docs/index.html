@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MDDIFF – Markdown Diff Editor</title>
+  <style>
+    :root {
+      --bg: #1e1e2e;
+      --bg-card: #252536;
+      --border: #3a3a5c;
+      --text: #cdd6f4;
+      --text-muted: #6c7086;
+      --accent: #89b4fa;
+      --accent-hover: #74c7ec;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 80px 20px 60px;
+      background: linear-gradient(180deg, #252536 0%, var(--bg) 100%);
+    }
+
+    .hero h1 {
+      font-size: 3.5em;
+      font-weight: 800;
+      margin-bottom: 8px;
+      letter-spacing: -1px;
+    }
+
+    .hero h1 .accent { color: var(--accent); }
+
+    .hero .tagline {
+      font-size: 1.3em;
+      color: var(--text-muted);
+      margin-bottom: 40px;
+    }
+
+    .hero .buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 32px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-2px); }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 2px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-2px); }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .features {
+      padding: 60px 0;
+    }
+
+    .features h2 {
+      text-align: center;
+      font-size: 2em;
+      margin-bottom: 40px;
+      color: var(--accent);
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover { border-color: var(--accent); }
+
+    .feature-card .icon {
+      font-size: 2em;
+      margin-bottom: 12px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.1em;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 0.95em;
+    }
+
+    .demo {
+      padding: 40px 0 60px;
+      text-align: center;
+    }
+
+    .demo h2 {
+      font-size: 2em;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    .demo p {
+      color: var(--text-muted);
+      margin-bottom: 30px;
+    }
+
+    .demo-window {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .demo-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #2a2a3e;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .demo-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .demo-dot.r { background: var(--red); }
+    .demo-dot.y { background: #f9e2af; }
+    .demo-dot.g { background: var(--green); }
+
+    .demo-body {
+      display: flex;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .demo-side {
+      flex: 1;
+      padding: 16px;
+      text-align: left;
+    }
+
+    .demo-side:first-child { border-right: 1px solid var(--border); }
+
+    .demo-line { padding: 2px 0; }
+    .demo-line.removed { color: var(--red); background: rgba(243,139,168,0.08); }
+    .demo-line.added { color: var(--green); background: rgba(166,227,161,0.08); }
+    .demo-line.normal { color: var(--text-muted); }
+
+    .install {
+      padding: 60px 0;
+      text-align: center;
+    }
+
+    .install h2 {
+      font-size: 2em;
+      margin-bottom: 20px;
+      color: var(--accent);
+    }
+
+    .install-code {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 32px;
+      display: inline-block;
+      text-align: left;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text);
+    }
+
+    .install-code .comment { color: var(--text-muted); }
+    .install-code .cmd { color: var(--green); }
+
+    footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 2.2em; }
+      .hero .tagline { font-size: 1em; }
+      .demo-body { flex-direction: column; }
+      .demo-side:first-child { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hero">
+    <h1><span class="accent">MD</span>DIFF</h1>
+    <p class="tagline">Side-by-side Markdown Diff Editor for macOS</p>
+    <div class="buttons">
+      <a href="https://github.com/GodModeAI2025/MDDIFF/releases" class="btn btn-primary">
+        Download for Mac (Apple Silicon)
+      </a>
+      <a href="https://github.com/GodModeAI2025/MDDIFF" class="btn btn-secondary">
+        View on GitHub
+      </a>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <section class="features">
+      <h2>Features</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="icon">&#x1F4C4;&#x21C4;&#x1F4C4;</div>
+          <h3>Split View</h3>
+          <p>Open two Markdown files side by side. Edit both simultaneously with full editor support.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon"><span style="color:var(--green)">+</span> <span style="color:var(--red)">&minus;</span></div>
+          <h3>Git-style Diff</h3>
+          <p>Line-by-line comparison with color-coded additions and deletions, just like git diff.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#x1F441;</div>
+          <h3>Diff Preview</h3>
+          <p>View diffs as rendered Markdown with highlighted changes, not just raw source.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#x1F4DD;</div>
+          <h3>Edit & Preview</h3>
+          <p>Toggle each panel between edit mode and rendered Markdown preview independently.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#x1F503;</div>
+          <h3>Synced Scroll</h3>
+          <p>Both panels scroll in sync &mdash; in editor, preview, and diff view.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#x1F3AF;</div>
+          <h3>MD Only</h3>
+          <p>Purpose-built for Markdown. File dialogs filter for .md files. Drag &amp; drop supported.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="demo">
+      <h2>How it looks</h2>
+      <p>Git-style side-by-side diff with line numbers</p>
+      <div class="demo-window">
+        <div class="demo-titlebar">
+          <div class="demo-dot r"></div>
+          <div class="demo-dot y"></div>
+          <div class="demo-dot g"></div>
+        </div>
+        <div class="demo-body">
+          <div class="demo-side">
+            <div class="demo-line normal">&nbsp;&nbsp;# Project Readme</div>
+            <div class="demo-line normal">&nbsp;&nbsp;</div>
+            <div class="demo-line removed">- Version: 1.0.0</div>
+            <div class="demo-line normal">&nbsp;&nbsp;A great tool for comparing</div>
+            <div class="demo-line removed">- markdown documents easily.</div>
+            <div class="demo-line normal">&nbsp;&nbsp;</div>
+            <div class="demo-line normal">&nbsp;&nbsp;## Installation</div>
+          </div>
+          <div class="demo-side">
+            <div class="demo-line normal">&nbsp;&nbsp;# Project Readme</div>
+            <div class="demo-line normal">&nbsp;&nbsp;</div>
+            <div class="demo-line added">+ Version: 2.0.0</div>
+            <div class="demo-line normal">&nbsp;&nbsp;A great tool for comparing</div>
+            <div class="demo-line added">+ Markdown documents with style.</div>
+            <div class="demo-line normal">&nbsp;&nbsp;</div>
+            <div class="demo-line normal">&nbsp;&nbsp;## Installation</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="install">
+      <h2>Quick Start</h2>
+      <div class="install-code">
+        <span class="comment"># Clone &amp; run</span><br>
+        <span class="cmd">git clone</span> https://github.com/GodModeAI2025/MDDIFF.git<br>
+        <span class="cmd">cd</span> MDDIFF<br>
+        <span class="cmd">npm install</span><br>
+        <span class="cmd">npm start</span><br>
+        <br>
+        <span class="comment"># Build installer (Apple Silicon)</span><br>
+        <span class="cmd">npm run build</span>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <p>MDDIFF &mdash; Built with Electron &middot; <a href="https://github.com/GodModeAI2025/MDDIFF">GitHub</a></p>
+  </footer>
+
+</body>
+</html>

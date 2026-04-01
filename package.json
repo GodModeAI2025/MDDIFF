@@ -1,0 +1,53 @@
+{
+  "name": "mddiff",
+  "version": "1.0.0",
+  "description": "Markdown Diff Editor – Zwei Dateien nebeneinander vergleichen",
+  "main": "main.js",
+  "author": "Mark Zimmermann",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac --arm64",
+    "build:dmg": "electron-builder --mac dmg --arm64",
+    "build:pkg": "electron-builder --mac pkg --arm64"
+  },
+  "build": {
+    "appId": "com.mddiff.app",
+    "productName": "MDDIFF",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ],
+      "icon": "icon.icns",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "MDDIFF Installer",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "icon.icns",
+      "node_modules/**/*"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "diff": "^7.0.0",
+    "marked": "^15.0.0"
+  }
+}

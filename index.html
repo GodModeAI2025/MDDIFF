@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MDDIFF – Markdown Diff Editor</title>
+  <style>
+    :root {
+      --bg: #1e1e2e;
+      --bg-panel: #252536;
+      --bg-editor: #1a1a2e;
+      --bg-toolbar: #2a2a3e;
+      --border: #3a3a5c;
+      --text: #cdd6f4;
+      --text-muted: #6c7086;
+      --accent: #89b4fa;
+      --accent-hover: #74c7ec;
+      --green: #a6e3a1;
+      --green-bg: rgba(166, 227, 161, 0.10);
+      --green-bg-strong: rgba(166, 227, 161, 0.20);
+      --red: #f38ba8;
+      --red-bg: rgba(243, 139, 168, 0.10);
+      --red-bg-strong: rgba(243, 139, 168, 0.20);
+      --yellow: #f9e2af;
+      --blue-bg: rgba(137, 180, 250, 0.08);
+      --scrollbar: #45475a;
+      --scrollbar-hover: #585b70;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: var(--bg-toolbar);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .top-bar .view-btn {
+      padding: 6px 18px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.15s;
+    }
+
+    .top-bar .view-btn:hover { color: var(--text); border-color: var(--accent); }
+    .top-bar .view-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+
+    /* Main Content */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Panels */
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border-right: 1px solid var(--border);
+    }
+
+    .panel:last-of-type { border-right: none; }
+
+    .panel-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-toolbar);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .panel-toolbar .file-name {
+      flex: 1;
+      font-size: 12px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .panel-toolbar .file-name.has-file { color: var(--text); }
+    .panel-toolbar .file-name .unsaved { color: var(--yellow); }
+
+    .btn {
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { color: var(--text); border-color: var(--accent); }
+    .btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+    .btn-open {
+      background: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .btn-open:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+    /* Editor & Preview */
+    .panel-content {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .editor-area {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-editor);
+      color: var(--text);
+      border: none;
+      resize: none;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      tab-size: 2;
+      outline: none;
+      overflow-y: auto;
+    }
+
+    .preview-area {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 20px 24px;
+      background: var(--bg-panel);
+      display: none;
+    }
+
+    .preview-area.visible { display: block; }
+    .editor-area.hidden { display: none; }
+
+    /* Markdown Preview Styling */
+    .preview-area h1, .preview-area h2, .preview-area h3,
+    .preview-area h4, .preview-area h5, .preview-area h6 {
+      color: var(--accent);
+      margin: 1em 0 0.5em;
+      line-height: 1.3;
+    }
+    .preview-area h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+    .preview-area h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+    .preview-area h3 { font-size: 1.2em; }
+    .preview-area p { margin: 0.6em 0; line-height: 1.7; }
+    .preview-area ul, .preview-area ol { padding-left: 1.5em; margin: 0.5em 0; }
+    .preview-area li { margin: 0.25em 0; }
+    .preview-area code {
+      background: rgba(137, 180, 250, 0.12);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.9em;
+    }
+    .preview-area pre {
+      background: var(--bg-editor);
+      padding: 12px 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 0.8em 0;
+      border: 1px solid var(--border);
+    }
+    .preview-area pre code { background: none; padding: 0; }
+    .preview-area blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 12px;
+      color: var(--text-muted);
+      margin: 0.6em 0;
+    }
+    .preview-area table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+    .preview-area th, .preview-area td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+    .preview-area th { background: var(--bg-toolbar); }
+    .preview-area a { color: var(--accent); }
+    .preview-area img { max-width: 100%; border-radius: 4px; }
+    .preview-area hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+
+    /* Diff Panel */
+    .diff-panel {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .diff-panel.visible { display: flex; }
+
+    .diff-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-toolbar);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .diff-toolbar .diff-title {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .diff-stats {
+      font-size: 12px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .diff-stats .additions { color: var(--green); }
+    .diff-stats .deletions { color: var(--red); }
+
+    .diff-content {
+      flex: 1;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .diff-side-by-side {
+      display: flex;
+      height: 100%;
+    }
+
+    .diff-side {
+      flex: 1;
+      overflow-y: auto;
+      min-width: 0;
+    }
+
+    .diff-side:first-child { border-right: 1px solid var(--border); }
+
+    .diff-line {
+      display: flex;
+      min-height: 1.55em;
+      padding: 0 8px;
+    }
+
+    .diff-line-number {
+      width: 48px;
+      text-align: right;
+      padding-right: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      user-select: none;
+      opacity: 0.6;
+    }
+
+    .diff-line-content {
+      flex: 1;
+      white-space: pre-wrap;
+      word-break: break-all;
+      padding: 0 4px;
+    }
+
+    .diff-line.added { background: var(--green-bg); }
+    .diff-line.added .diff-line-content { color: var(--green); }
+    .diff-line.removed { background: var(--red-bg); }
+    .diff-line.removed .diff-line-content { color: var(--red); }
+    .diff-line.empty { background: var(--blue-bg); opacity: 0.3; }
+
+    .diff-hunk-header {
+      background: var(--blue-bg);
+      color: var(--accent);
+      padding: 4px 12px;
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Diff Preview */
+    .diff-preview-content {
+      overflow: hidden;
+    }
+
+    .diff-preview-side {
+      padding: 20px 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .diff-preview-side h1, .diff-preview-side h2, .diff-preview-side h3,
+    .diff-preview-side h4, .diff-preview-side h5, .diff-preview-side h6 {
+      color: var(--accent); margin: 1em 0 0.5em; line-height: 1.3;
+    }
+    .diff-preview-side h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+    .diff-preview-side h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+    .diff-preview-side h3 { font-size: 1.2em; }
+    .diff-preview-side p { margin: 0.6em 0; line-height: 1.7; }
+    .diff-preview-side ul, .diff-preview-side ol { padding-left: 1.5em; margin: 0.5em 0; }
+    .diff-preview-side li { margin: 0.25em 0; }
+    .diff-preview-side code {
+      background: rgba(137, 180, 250, 0.12); padding: 2px 6px; border-radius: 3px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9em;
+    }
+    .diff-preview-side pre {
+      background: var(--bg-editor); padding: 12px 16px; border-radius: 6px;
+      overflow-x: auto; margin: 0.8em 0; border: 1px solid var(--border);
+    }
+    .diff-preview-side pre code { background: none; padding: 0; }
+    .diff-preview-side blockquote {
+      border-left: 3px solid var(--accent); padding-left: 12px;
+      color: var(--text-muted); margin: 0.6em 0;
+    }
+    .diff-preview-side table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+    .diff-preview-side th, .diff-preview-side td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+    .diff-preview-side th { background: var(--bg-toolbar); }
+    .diff-preview-side a { color: var(--accent); }
+    .diff-preview-side img { max-width: 100%; border-radius: 4px; }
+    .diff-preview-side hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+
+    /* Diff highlight markers in preview */
+    .diff-mark-added {
+      background: var(--green-bg-strong);
+      border-left: 3px solid var(--green);
+      padding-left: 6px;
+      display: block;
+      margin: 2px 0;
+    }
+    .diff-mark-removed {
+      background: var(--red-bg-strong);
+      border-left: 3px solid var(--red);
+      padding-left: 6px;
+      display: block;
+      margin: 2px 0;
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      gap: 12px;
+    }
+
+    .empty-state svg { opacity: 0.3; }
+
+    .empty-state .hint {
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* Side-by-Side panels hidden in diff mode */
+    .main.diff-mode .panel { display: none; }
+    .main.diff-mode .diff-panel { display: flex; }
+
+    /* Drag & Drop highlight */
+    .panel-content.drag-over {
+      outline: 2px dashed var(--accent);
+      outline-offset: -4px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <button class="view-btn active" data-view="split">Split-Ansicht</button>
+    <button class="view-btn" data-view="diff">Diff-Ansicht</button>
+  </div>
+
+  <div class="main" id="mainContainer">
+    <!-- Left Panel -->
+    <div class="panel" id="panelLeft">
+      <div class="panel-toolbar">
+        <button class="btn btn-open" onclick="api.openFile('left')">Datei öffnen</button>
+        <span class="file-name" id="fileNameLeft">Keine Datei geladen</span>
+        <button class="btn mode-btn" data-side="left" data-mode="edit">Bearbeiten</button>
+        <button class="btn mode-btn" data-side="left" data-mode="preview">Vorschau</button>
+      </div>
+      <div class="panel-content" id="contentLeft" data-side="left">
+        <textarea class="editor-area" id="editorLeft" placeholder="Markdown hier eingeben oder Datei öffnen…" spellcheck="false"></textarea>
+        <div class="preview-area" id="previewLeft"></div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="panel" id="panelRight">
+      <div class="panel-toolbar">
+        <button class="btn btn-open" onclick="api.openFile('right')">Datei öffnen</button>
+        <span class="file-name" id="fileNameRight">Keine Datei geladen</span>
+        <button class="btn mode-btn" data-side="right" data-mode="edit">Bearbeiten</button>
+        <button class="btn mode-btn" data-side="right" data-mode="preview">Vorschau</button>
+      </div>
+      <div class="panel-content" id="contentRight" data-side="right">
+        <textarea class="editor-area" id="editorRight" placeholder="Markdown hier eingeben oder Datei öffnen…" spellcheck="false"></textarea>
+        <div class="preview-area" id="previewRight"></div>
+      </div>
+    </div>
+
+    <!-- Diff Panel -->
+    <div class="diff-panel" id="diffPanel">
+      <div class="diff-toolbar">
+        <span class="diff-title">Diff-Vergleich</span>
+        <div class="diff-stats" id="diffStats"></div>
+        <button class="btn diff-mode-btn active" data-diff-mode="source">Quelltext</button>
+        <button class="btn diff-mode-btn" data-diff-mode="preview">Vorschau</button>
+      </div>
+      <div class="diff-content" id="diffContentSource">
+        <div class="diff-side-by-side">
+          <div class="diff-side" id="diffLeft"></div>
+          <div class="diff-side" id="diffRight"></div>
+        </div>
+      </div>
+      <div class="diff-content diff-preview-content" id="diffContentPreview" style="display:none;">
+        <div class="diff-side-by-side">
+          <div class="diff-side diff-preview-side" id="diffPreviewLeft"></div>
+          <div class="diff-side diff-preview-side" id="diffPreviewRight"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

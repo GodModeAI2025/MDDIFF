@@ -2,101 +2,186 @@
 const state = {
   left:  { filePath: null, content: '', mode: 'edit', dirty: false },
   right: { filePath: null, content: '', mode: 'edit', dirty: false },
-  view: 'split',          // 'split' | 'diff'
-  diffMode: 'source',     // 'source' | 'preview'
+  view: 'split',
+  diffMode: 'source',
+  theme: 'dark',
   syncScroll: true
 };
 
 /* ─── DOM refs ──────────────────────────────────────────────────── */
 const els = {
-  editorLeft:   document.getElementById('editorLeft'),
-  editorRight:  document.getElementById('editorRight'),
-  previewLeft:  document.getElementById('previewLeft'),
-  previewRight: document.getElementById('previewRight'),
-  fileNameLeft: document.getElementById('fileNameLeft'),
-  fileNameRight:document.getElementById('fileNameRight'),
-  contentLeft:  document.getElementById('contentLeft'),
-  contentRight: document.getElementById('contentRight'),
-  diffLeft:     document.getElementById('diffLeft'),
-  diffRight:    document.getElementById('diffRight'),
-  diffStats:    document.getElementById('diffStats'),
-  diffContentSource:  document.getElementById('diffContentSource'),
-  diffContentPreview: document.getElementById('diffContentPreview'),
-  diffPreviewLeft:    document.getElementById('diffPreviewLeft'),
-  diffPreviewRight:   document.getElementById('diffPreviewRight'),
-  mainContainer:document.getElementById('mainContainer'),
-  diffPanel:    document.getElementById('diffPanel'),
+  editorLeft:    document.getElementById('editorLeft'),
+  editorRight:   document.getElementById('editorRight'),
+  previewLeft:   document.getElementById('previewLeft'),
+  previewRight:  document.getElementById('previewRight'),
+  fileNameLeft:  document.getElementById('fileNameLeft'),
+  fileNameRight: document.getElementById('fileNameRight'),
+  contentLeft:   document.getElementById('contentLeft'),
+  contentRight:  document.getElementById('contentRight'),
+  diffLeft:      document.getElementById('diffLeft'),
+  diffRight:     document.getElementById('diffRight'),
+  diffStats:     document.getElementById('diffStats'),
+  diffContentSource:   document.getElementById('diffContentSource'),
+  diffContentPreview:  document.getElementById('diffContentPreview'),
+  diffPreviewLeft:     document.getElementById('diffPreviewLeft'),
+  diffPreviewRight:    document.getElementById('diffPreviewRight'),
+  diffEditorLeft:      document.getElementById('diffEditorLeft'),
+  diffEditorRight:     document.getElementById('diffEditorRight'),
+  diffLeftOverlay:     document.getElementById('diffLeftOverlay'),
+  diffRightOverlay:    document.getElementById('diffRightOverlay'),
+  diffPreviewEditorLeft:   document.getElementById('diffPreviewEditorLeft'),
+  diffPreviewEditorRight:  document.getElementById('diffPreviewEditorRight'),
+  diffPreviewLeftOverlay:  document.getElementById('diffPreviewLeftOverlay'),
+  diffPreviewRightOverlay: document.getElementById('diffPreviewRightOverlay'),
+  diffFileNameLeft:        document.getElementById('diffFileNameLeft'),
+  diffFileNameRight:       document.getElementById('diffFileNameRight'),
+  diffPreviewFileNameLeft: document.getElementById('diffPreviewFileNameLeft'),
+  diffPreviewFileNameRight:document.getElementById('diffPreviewFileNameRight'),
+  mainContainer: document.getElementById('mainContainer'),
+  diffPanel:     document.getElementById('diffPanel'),
+  themeToggle:   document.getElementById('themeToggle'),
 };
 
-/* ─── Minimal Markdown → HTML (no external dep in renderer) ───── */
+/* ─── Theme Toggle ──────────────────────────────────────────────── */
+els.themeToggle.addEventListener('click', () => {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', state.theme);
+  els.themeToggle.textContent = state.theme === 'dark' ? '\u263E' : '\u2600';
+});
+
+/* ─── Markdown Renderer (improved tables) ───────────────────────── */
 function renderMarkdown(md) {
-  let html = md
-    // Code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Headings
-    .replace(/^######\s+(.+)$/gm, '<h6>$1</h6>')
-    .replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>')
-    .replace(/^####\s+(.+)$/gm, '<h4>$1</h4>')
-    .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
-    .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
-    .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>')
-    // Bold & Italic
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Strikethrough
-    .replace(/~~(.+?)~~/g, '<del>$1</del>')
-    // Links & Images
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    // Horizontal rule
-    .replace(/^---+$/gm, '<hr>')
-    // Blockquotes
-    .replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>')
-    // Unordered lists
-    .replace(/^[-*+]\s+(.+)$/gm, '<li>$1</li>')
-    // Tables (basic)
-    .replace(/^\|(.+)\|$/gm, (match, content) => {
-      const cells = content.split('|').map(c => c.trim());
-      if (cells.every(c => /^[-:]+$/.test(c))) return '';
-      const tag = 'td';
-      return '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>';
-    })
-    // Paragraphs
-    .replace(/\n{2,}/g, '</p><p>')
-    // Line breaks
-    .replace(/\n/g, '<br>');
+  // Protect code blocks first
+  const codeBlocks = [];
+  md = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    codeBlocks.push(`<pre><code class="lang-${lang}">${escapeHtml(code)}</code></pre>`);
+    return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
+  });
+
+  // Tables: parse contiguous lines starting with |
+  const lines = md.split('\n');
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    // Detect table block
+    if (/^\|.+\|$/.test(lines[i].trim())) {
+      let tableLines = [];
+      while (i < lines.length && /^\|.+\|$/.test(lines[i].trim())) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+      out.push(buildTable(tableLines));
+      continue;
+    }
+    out.push(lines[i]);
+    i++;
+  }
+
+  let html = out.join('\n');
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Headings
+  html = html.replace(/^######\s+(.+)$/gm, '<h6>$1</h6>');
+  html = html.replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>');
+  html = html.replace(/^####\s+(.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
+
+  // Bold & Italic
+  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Strikethrough
+  html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
+
+  // Links & Images
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+  // Horizontal rule
+  html = html.replace(/^---+$/gm, '<hr>');
+
+  // Blockquotes
+  html = html.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+
+  // Unordered lists
+  html = html.replace(/^[-*+]\s+(.+)$/gm, '<li>$1</li>');
+
+  // Paragraphs & breaks
+  html = html.replace(/\n{2,}/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
 
   // Wrap loose li in ul
-  html = html.replace(/((?:<li>.*?<\/li>\s*)+)/g, '<ul>$1</ul>');
-  // Wrap tr in table
-  html = html.replace(/((?:<tr>.*?<\/tr>\s*)+)/g, '<table>$1</table>');
+  html = html.replace(/((?:<li>.*?<\/li>(?:<br>)?)+)/g, '<ul>$1</ul>');
+
+  // Restore code blocks
+  codeBlocks.forEach((block, idx) => {
+    html = html.replace(`%%CODEBLOCK_${idx}%%`, block);
+  });
 
   return '<p>' + html + '</p>';
 }
 
-/* ─── Diff Engine (Myers-like line diff) ────────────────────────── */
-function computeDiff(textA, textB) {
-  const linesA = textA.split('\n');
-  const linesB = textB.split('\n');
+function buildTable(lines) {
+  if (lines.length < 2) return lines.join('\n');
 
-  // LCS-based diff
-  const m = linesA.length, n = linesB.length;
-  // Build LCS table
-  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (linesA[i - 1] === linesB[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-      }
+  const parseCells = line => line.slice(1, -1).split('|').map(c => c.trim());
+
+  // Find separator line (contains only -, :, |, spaces)
+  let sepIdx = -1;
+  for (let i = 1; i < lines.length; i++) {
+    const cells = parseCells(lines[i]);
+    if (cells.every(c => /^[-:]+$/.test(c))) {
+      sepIdx = i;
+      break;
     }
   }
 
-  // Backtrack to produce diff
+  let html = '<table>';
+
+  if (sepIdx > 0) {
+    // Header rows (before separator)
+    for (let i = 0; i < sepIdx; i++) {
+      const cells = parseCells(lines[i]);
+      html += '<tr>' + cells.map(c => `<th>${c}</th>`).join('') + '</tr>';
+    }
+    // Body rows (after separator)
+    for (let i = sepIdx + 1; i < lines.length; i++) {
+      const cells = parseCells(lines[i]);
+      html += '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>';
+    }
+  } else {
+    // No separator found, all body
+    for (const line of lines) {
+      const cells = parseCells(line);
+      html += '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>';
+    }
+  }
+
+  html += '</table>';
+  return html;
+}
+
+/* ─── Diff Engine (LCS) ────────────────────────────────────────── */
+function computeDiff(textA, textB) {
+  const linesA = textA.split('\n');
+  const linesB = textB.split('\n');
+  const m = linesA.length, n = linesB.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = linesA[i - 1] === linesB[j - 1]
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+
   const result = [];
   let i = m, j = n;
   while (i > 0 || j > 0) {
@@ -111,77 +196,44 @@ function computeDiff(textA, textB) {
       i--;
     }
   }
-
   return result;
 }
 
 function escapeHtml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function renderDiff() {
-  const diff = computeDiff(
-    state.left.content || '',
-    state.right.content || ''
-  );
+  const diff = computeDiff(state.left.content || '', state.right.content || '');
 
-  let leftHtml = '';
-  let rightHtml = '';
+  let leftHtml = '', rightHtml = '';
   let additions = 0, deletions = 0;
 
   for (const entry of diff) {
     if (entry.type === 'equal') {
-      const line = `<div class="diff-line">
-        <span class="diff-line-number">${entry.lineA}</span>
-        <span class="diff-line-content">${escapeHtml(entry.text)}</span>
-      </div>`;
-      leftHtml += line;
-      rightHtml += `<div class="diff-line">
-        <span class="diff-line-number">${entry.lineB}</span>
-        <span class="diff-line-content">${escapeHtml(entry.text)}</span>
-      </div>`;
+      leftHtml += `<div class="diff-line"><span class="diff-line-number">${entry.lineA}</span><span class="diff-line-content">${escapeHtml(entry.text)}</span></div>`;
+      rightHtml += `<div class="diff-line"><span class="diff-line-number">${entry.lineB}</span><span class="diff-line-content">${escapeHtml(entry.text)}</span></div>`;
     } else if (entry.type === 'removed') {
       deletions++;
-      leftHtml += `<div class="diff-line removed">
-        <span class="diff-line-number">${entry.lineA}</span>
-        <span class="diff-line-content">- ${escapeHtml(entry.text)}</span>
-      </div>`;
-      rightHtml += `<div class="diff-line empty">
-        <span class="diff-line-number"></span>
-        <span class="diff-line-content"></span>
-      </div>`;
-    } else if (entry.type === 'added') {
+      leftHtml += `<div class="diff-line removed"><span class="diff-line-number">${entry.lineA}</span><span class="diff-line-content">- ${escapeHtml(entry.text)}</span></div>`;
+      rightHtml += `<div class="diff-line empty"><span class="diff-line-number"></span><span class="diff-line-content"></span></div>`;
+    } else {
       additions++;
-      leftHtml += `<div class="diff-line empty">
-        <span class="diff-line-number"></span>
-        <span class="diff-line-content"></span>
-      </div>`;
-      rightHtml += `<div class="diff-line added">
-        <span class="diff-line-number">${entry.lineB}</span>
-        <span class="diff-line-content">+ ${escapeHtml(entry.text)}</span>
-      </div>`;
+      leftHtml += `<div class="diff-line empty"><span class="diff-line-number"></span><span class="diff-line-content"></span></div>`;
+      rightHtml += `<div class="diff-line added"><span class="diff-line-number">${entry.lineB}</span><span class="diff-line-content">+ ${escapeHtml(entry.text)}</span></div>`;
     }
   }
 
   els.diffLeft.innerHTML = leftHtml;
   els.diffRight.innerHTML = rightHtml;
-  els.diffStats.innerHTML = `
-    <span class="additions">+${additions}</span>
-    <span class="deletions">-${deletions}</span>
-  `;
+  els.diffStats.innerHTML = `<span class="additions">+${additions}</span><span class="deletions">-${deletions}</span>`;
+
+  // Update diff file names
+  updateDiffFileNames();
 }
 
-/* ─── Diff Preview (gerenderte Vorschau mit Markierungen) ───────── */
 function renderDiffPreview() {
-  const diff = computeDiff(
-    state.left.content || '',
-    state.right.content || ''
-  );
-
-  // Gruppiere Zeilen nach Typ für linke und rechte Seite
+  const diff = computeDiff(state.left.content || '', state.right.content || '');
   let leftMd = '', rightMd = '';
 
   for (const entry of diff) {
@@ -189,19 +241,15 @@ function renderDiffPreview() {
       leftMd += entry.text + '\n';
       rightMd += entry.text + '\n';
     } else if (entry.type === 'removed') {
-      // Markierung für entfernte Zeilen (links)
       leftMd += '%%DIFF_REMOVED_START%%' + entry.text + '%%DIFF_REMOVED_END%%\n';
-    } else if (entry.type === 'added') {
-      // Markierung für hinzugefügte Zeilen (rechts)
+    } else {
       rightMd += '%%DIFF_ADDED_START%%' + entry.text + '%%DIFF_ADDED_END%%\n';
     }
   }
 
-  // Render Markdown und ersetze Marker durch HTML-Klassen
   let leftHtml = renderMarkdown(leftMd);
   let rightHtml = renderMarkdown(rightMd);
 
-  // Marker in gestylte Spans umwandeln
   leftHtml = leftHtml
     .replace(/%%DIFF_REMOVED_START%%/g, '<span class="diff-mark-removed">')
     .replace(/%%DIFF_REMOVED_END%%/g, '</span>');
@@ -211,7 +259,98 @@ function renderDiffPreview() {
 
   els.diffPreviewLeft.innerHTML = leftHtml;
   els.diffPreviewRight.innerHTML = rightHtml;
+  updateDiffFileNames();
 }
+
+function updateDiffFileNames() {
+  ['left', 'right'].forEach(side => {
+    const name = state[side].filePath ? state[side].filePath.split('/').pop() : (side === 'left' ? 'Links' : 'Rechts');
+    const cls = state[side].filePath ? 'file-name has-file' : 'file-name';
+    els[`diffFileName${cap(side)}`].textContent = name;
+    els[`diffFileName${cap(side)}`].className = cls;
+    els[`diffPreviewFileName${cap(side)}`].textContent = name;
+    els[`diffPreviewFileName${cap(side)}`].className = cls;
+  });
+}
+
+/* ─── Diff Edit Toggle ──────────────────────────────────────────── */
+// Source diff: switch between diff view and editable textarea
+document.querySelectorAll('.diff-edit-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const side = btn.dataset.side;
+    const mode = btn.dataset.mode;
+    const overlay = els[`diff${cap(side)}Overlay`];
+    const editor = els[`diffEditor${cap(side)}`];
+
+    // Update button states
+    document.querySelectorAll(`.diff-edit-btn[data-side="${side}"]`).forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+
+    if (mode === 'edit') {
+      overlay.style.display = 'none';
+      editor.style.display = 'block';
+      editor.value = state[side].content;
+      editor.focus();
+    } else {
+      overlay.style.display = '';
+      editor.style.display = 'none';
+      renderDiff();
+    }
+  });
+});
+
+// Preview diff: switch between preview view and editable textarea
+document.querySelectorAll('.diff-preview-edit-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const side = btn.dataset.side;
+    const mode = btn.dataset.mode;
+    const overlay = els[`diffPreview${cap(side)}Overlay`];
+    const editor = els[`diffPreviewEditor${cap(side)}`];
+
+    document.querySelectorAll(`.diff-preview-edit-btn[data-side="${side}"]`).forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+
+    if (mode === 'edit') {
+      overlay.style.display = 'none';
+      editor.style.display = 'block';
+      editor.value = state[side].content;
+      editor.focus();
+    } else {
+      overlay.style.display = '';
+      editor.style.display = 'none';
+      renderDiffPreview();
+    }
+  });
+});
+
+// Handle input from diff editors
+function setupDiffEditor(editorEl, side) {
+  editorEl.addEventListener('input', () => {
+    state[side].content = editorEl.value;
+    state[side].dirty = true;
+    // Sync back to split-view editor
+    els[`editor${cap(side)}`].value = editorEl.value;
+    updateFileName(side);
+  });
+
+  editorEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = editorEl.selectionStart;
+      const end = editorEl.selectionEnd;
+      editorEl.value = editorEl.value.substring(0, start) + '  ' + editorEl.value.substring(end);
+      editorEl.selectionStart = editorEl.selectionEnd = start + 2;
+      editorEl.dispatchEvent(new Event('input'));
+    }
+  });
+}
+
+setupDiffEditor(els.diffEditorLeft, 'left');
+setupDiffEditor(els.diffEditorRight, 'right');
+setupDiffEditor(els.diffPreviewEditorLeft, 'left');
+setupDiffEditor(els.diffPreviewEditorRight, 'right');
 
 /* ─── Diff Mode Toggle (Quelltext / Vorschau) ───────────────────── */
 document.querySelectorAll('.diff-mode-btn').forEach(btn => {
@@ -227,6 +366,7 @@ document.querySelectorAll('.diff-mode-btn').forEach(btn => {
     } else {
       els.diffContentSource.style.display = '';
       els.diffContentPreview.style.display = 'none';
+      renderDiff();
     }
   });
 });
@@ -244,21 +384,14 @@ function setupSyncScroll(sourceEl, targetEl) {
   });
 }
 
-// Sync editors
 setupSyncScroll(els.editorLeft, els.editorRight);
 setupSyncScroll(els.editorRight, els.editorLeft);
-
-// Sync previews
 setupSyncScroll(els.previewLeft, els.previewRight);
 setupSyncScroll(els.previewRight, els.previewLeft);
-
-// Sync diff sides
-setupSyncScroll(els.diffLeft, els.diffRight);
-setupSyncScroll(els.diffRight, els.diffLeft);
-
-// Sync diff preview sides
-setupSyncScroll(els.diffPreviewLeft, els.diffPreviewRight);
-setupSyncScroll(els.diffPreviewRight, els.diffPreviewLeft);
+setupSyncScroll(els.diffLeftOverlay, els.diffRightOverlay);
+setupSyncScroll(els.diffRightOverlay, els.diffLeftOverlay);
+setupSyncScroll(els.diffPreviewLeftOverlay, els.diffPreviewRightOverlay);
+setupSyncScroll(els.diffPreviewRightOverlay, els.diffPreviewLeftOverlay);
 
 /* ─── Mode Toggle (Edit / Preview) ──────────────────────────────── */
 function setMode(side, mode) {
@@ -275,7 +408,6 @@ function setMode(side, mode) {
     preview.classList.remove('visible');
   }
 
-  // Update button states
   document.querySelectorAll(`.mode-btn[data-side="${side}"]`).forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
@@ -284,9 +416,7 @@ function setMode(side, mode) {
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    setMode(btn.dataset.side, btn.dataset.mode);
-  });
+  btn.addEventListener('click', () => setMode(btn.dataset.side, btn.dataset.mode));
 });
 
 /* ─── View Toggle (Split / Diff) ────────────────────────────────── */
@@ -299,11 +429,18 @@ document.querySelectorAll('.view-btn').forEach(btn => {
     if (state.view === 'diff') {
       els.mainContainer.classList.add('diff-mode');
       renderDiff();
-      if (state.diffMode === 'preview') {
-        renderDiffPreview();
-      }
+      if (state.diffMode === 'preview') renderDiffPreview();
     } else {
       els.mainContainer.classList.remove('diff-mode');
+      // Sync content back to split editors
+      els.editorLeft.value = state.left.content;
+      els.editorRight.value = state.right.content;
+      if (state.left.mode === 'preview') {
+        els.previewLeft.innerHTML = renderMarkdown(state.left.content);
+      }
+      if (state.right.mode === 'preview') {
+        els.previewRight.innerHTML = renderMarkdown(state.right.content);
+      }
     }
   });
 });
@@ -322,9 +459,7 @@ function handleInput(side) {
 
     if (state.view === 'diff') {
       renderDiff();
-      if (state.diffMode === 'preview') {
-        renderDiffPreview();
-      }
+      if (state.diffMode === 'preview') renderDiffPreview();
     }
   };
 }
@@ -332,7 +467,6 @@ function handleInput(side) {
 els.editorLeft.addEventListener('input', handleInput('left'));
 els.editorRight.addEventListener('input', handleInput('right'));
 
-// Tab key support
 [els.editorLeft, els.editorRight].forEach(editor => {
   editor.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
@@ -366,8 +500,7 @@ window.api.onFileOpened(({ side, filePath, content }) => {
   state[side].content = content;
   state[side].dirty = false;
 
-  const editor = els[`editor${cap(side)}`];
-  editor.value = content;
+  els[`editor${cap(side)}`].value = content;
   updateFileName(side);
 
   if (state[side].mode === 'preview') {
@@ -376,16 +509,14 @@ window.api.onFileOpened(({ side, filePath, content }) => {
 
   if (state.view === 'diff') {
     renderDiff();
+    if (state.diffMode === 'preview') renderDiffPreview();
   }
 });
 
 /* ─── IPC: Save File ────────────────────────────────────────────── */
 window.api.onSaveFile(async (side) => {
   const s = state[side];
-  const result = await window.api.saveFile({
-    filePath: s.filePath,
-    content: s.content
-  });
+  const result = await window.api.saveFile({ filePath: s.filePath, content: s.content });
   if (result.success) {
     s.filePath = result.filePath;
     s.dirty = false;
@@ -403,9 +534,7 @@ window.api.onSaveFile(async (side) => {
     el.classList.add('drag-over');
   });
 
-  el.addEventListener('dragleave', () => {
-    el.classList.remove('drag-over');
-  });
+  el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
 
   el.addEventListener('drop', (e) => {
     e.preventDefault();

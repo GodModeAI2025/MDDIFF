@@ -456,10 +456,11 @@ function updateFileName(side) {
 }
 
 function updateSaveBtn(side) {
+  if (side === 'left') return;
   el('save', side).classList.toggle('visible', state[side].dirty);
 }
 
-for (const side of SIDES) el('save', side).addEventListener('click', () => saveFile(side));
+els.saveRight.addEventListener('click', () => saveFile('right'));
 
 async function saveFile(side) {
   const s = state[side];
@@ -472,7 +473,7 @@ async function saveFile(side) {
   }
 }
 
-window.api.onSaveFile((side) => saveFile(side));
+window.api.onSaveFile((side) => { if (side === 'right') saveFile(side); });
 
 /* ─── Load Content ────────────────────────────────────────────── */
 function loadContent(side, content, filePath, dirty) {

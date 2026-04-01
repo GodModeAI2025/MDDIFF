@@ -54,12 +54,10 @@ function buildLineSpans(count, statuses, prefix) {
     if (prefix === 'line-num') {
       let marker = '', cls = '';
       if (s === 'add') { marker = '+'; cls = 'diff-add'; }
-      else if (s === 'mod') { marker = '~'; cls = 'diff-mod'; }
       parts[i] = `<span class="${prefix} ${cls}">${marker}${i + 1}</span>`;
     } else {
       let cls = '';
       if (s === 'add') cls = 'hl-add';
-      else if (s === 'mod') cls = 'hl-mod';
       parts[i] = `<span class="${prefix} ${cls}">\n</span>`;
     }
   }
@@ -173,26 +171,9 @@ function renderPreviewWithDiff(side) {
   const statuses = new Array(lines.length).fill('');
 
   // Gleiche Gruppierung wie in updateGutters
-  let i = 0;
-  while (i < diff.length) {
-    if (diff[i].type === 'eq') { i++; continue; }
-    const delBlock = [];
-    while (i < diff.length && diff[i].type === 'del') { delBlock.push(diff[i]); i++; }
-    const addBlock = [];
-    while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
-    const paired = (delBlock.length > 0 && addBlock.length > 0)
-      ? Math.min(delBlock.length, addBlock.length) : 0;
-    for (let p = 0; p < paired; p++) {
-      if (side === 'left') statuses[delBlock[p].la - 1] = 'mod';
-      if (side === 'right') statuses[addBlock[p].lb - 1] = 'mod';
-    }
-    // Übrige: GRÜN (diese Seite hat mehr)
-    for (let p = paired; p < delBlock.length; p++) {
-      if (side === 'left') statuses[delBlock[p].la - 1] = 'add';
-    }
-    for (let p = paired; p < addBlock.length; p++) {
-      if (side === 'right') statuses[addBlock[p].lb - 1] = 'add';
-    }
+  for (const e of diff) {
+    if (side === 'left' && e.type === 'del') statuses[e.la - 1] = 'add';
+    if (side === 'right' && e.type === 'add') statuses[e.lb - 1] = 'add';
   }
 
   // Tabellenzeilen nicht mit Markern umschließen (zerstört Table-Parsing),
@@ -219,7 +200,6 @@ function renderPreviewWithDiff(side) {
 
     if (inTable) inTable = false;
     if (statuses[i] === 'add') return '\x00DA\x00' + line + '\x00/DA\x00';
-    if (statuses[i] === 'mod') return '\x00DM\x00' + line + '\x00/DM\x00';
     return line;
   });
 
@@ -229,8 +209,6 @@ function renderPreviewWithDiff(side) {
     .replace(/\x00\/DA\x00/g, '</span>')
     .replace(/\x00DD\x00/g, '<span class="diff-mark-removed">')
     .replace(/\x00\/DD\x00/g, '</span>')
-    .replace(/\x00DM\x00/g, '<span class="diff-mark-modified">')
-    .replace(/\x00\/DM\x00/g, '</span>');
 
   // Diff-Klassen auf Tabellenzeilen anwenden
   if (tableRowDiffs.length) {
@@ -241,8 +219,7 @@ function renderPreviewWithDiff(side) {
       if (tables[d.table]) {
         const rows = tables[d.table].querySelectorAll('tr');
         if (rows[d.row]) {
-          const cls = d.status === 'add' ? 'diff-tr-added' : d.status === 'del' ? 'diff-tr-removed' : 'diff-tr-modified';
-          rows[d.row].classList.add(cls);
+          rows[d.row].classList.add('diff-tr-added');
         }
       }
     }
@@ -262,51 +239,18 @@ function updateGutters() {
     data[side] = { lines, statuses: new Array(lines.length).fill('') };
   }
 
-  // Gruppiere konsekutive del/add als Modifikationen
-  let adds = 0, dels = 0, mods = 0;
-  let i = 0;
-  while (i < diff.length) {
-    if (diff[i].type === 'eq') { i++; continue; }
-
-    // Sammle konsekutive del-Einträge
-    const delBlock = [];
-    while (i < diff.length && diff[i].type === 'del') { delBlock.push(diff[i]); i++; }
-
-    // Sammle direkt folgende add-Einträge
-    const addBlock = [];
-    while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
-
-    // Nur paaren wenn BEIDE Blöcke Einträge haben (echte Modifikation)
-    const paired = (delBlock.length > 0 && addBlock.length > 0)
-      ? Math.min(delBlock.length, addBlock.length) : 0;
-
-    for (let p = 0; p < paired; p++) {
-      data.left.statuses[delBlock[p].la - 1] = 'mod';
-      data.right.statuses[addBlock[p].lb - 1] = 'mod';
-      mods++;
-    }
-
-    // Übrige del = Zeile nur links vorhanden → GRÜN auf links (hat mehr)
-    for (let p = paired; p < delBlock.length; p++) {
-      data.left.statuses[delBlock[p].la - 1] = 'add';
-      dels++;
-    }
-
-    // Übrige add = Zeile nur rechts vorhanden → GRÜN auf rechts (hat mehr)
-    for (let p = paired; p < addBlock.length; p++) {
-      data.right.statuses[addBlock[p].lb - 1] = 'add';
-      adds++;
-    }
+  let diffs = 0;
+  for (const e of diff) {
+    if (e.type === 'del') { data.left.statuses[e.la - 1] = 'add'; diffs++; }
+    if (e.type === 'add') { data.right.statuses[e.lb - 1] = 'add'; diffs++; }
   }
 
   for (const side of SIDES) {
-    const { statuses } = data[side];
-    el('gutter', side).innerHTML = buildLineSpans(data[side].lines.length, statuses, 'line-num');
+    el('gutter', side).innerHTML = buildLineSpans(data[side].lines.length, data[side].statuses, 'line-num');
   }
 
-  const total = adds + dels + mods;
-  els.diffStats.innerHTML = total
-    ? `<span class="add">+${adds + dels} Unterschiede</span> <span style="color:var(--yellow)">~${mods} Änderungen</span>`
+  els.diffStats.innerHTML = diffs
+    ? `<span class="add">${diffs} Unterschiede</span>`
     : '';
 
   updateDeltaButtons();
@@ -444,19 +388,25 @@ function findMatchingLeftLine(rightLine) {
   return bestLeft + (rightLine - bestRight);
 }
 
+let lastCursorLeftLine = -1;
+
 function syncLeftToRightCursor() {
-  const rightEditor = els.editorRight;
-  const leftEditor = els.editorLeft;
-  const rightLine = getCursorLine(rightEditor);
+  const rightLine = getCursorLine(els.editorRight);
   const leftLine = findMatchingLeftLine(rightLine);
 
-  const style = getComputedStyle(leftEditor);
-  const lineHeight = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.6);
-  const paddingTop = parseFloat(style.paddingTop) || 0;
-  const targetY = paddingTop + leftLine * lineHeight;
+  if (leftLine === lastCursorLeftLine) return;
+  lastCursorLeftLine = leftLine;
 
-  leftEditor.scrollTop = Math.max(0, targetY - leftEditor.clientHeight / 3);
-  els.gutterLeft.scrollTop = leftEditor.scrollTop;
+  // Vorherige Cursor-Markierung entfernen, neue setzen
+  const nums = els.gutterLeft.querySelectorAll('.line-num');
+  for (const n of nums) n.classList.remove('cursor-line');
+  if (nums[leftLine]) {
+    nums[leftLine].classList.add('cursor-line');
+    // Sicherstellen dass die markierte Zeile im Gutter sichtbar ist
+    nums[leftLine].scrollIntoView({ block: 'nearest' });
+    // Editor links synchron scrollen
+    els.editorLeft.scrollTop = els.gutterLeft.scrollTop;
+  }
 }
 
 function setupEditor(side) {
@@ -695,33 +645,11 @@ function scrollToLine(side, lineIndex) {
 
 /* ─── Delta Navigation ────────────────────────────────────────── */
 function getDeltaLines(side) {
-  // Lese die berechneten Statuses aus dem Gutter (statt neu berechnen)
-  const content = state[side].content || '';
-  const lineCount = content.split('\n').length;
   const diff = getCachedDiff();
-
-  // Schnell: sammle alle Zeilen mit Diff-Status
   const lines = [];
-  const statuses = new Array(lineCount).fill('');
-
-  let i = 0;
-  while (i < diff.length) {
-    if (diff[i].type === 'eq') { i++; continue; }
-    const delBlock = [];
-    while (i < diff.length && diff[i].type === 'del') { delBlock.push(diff[i]); i++; }
-    const addBlock = [];
-    while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
-    const paired = Math.min(delBlock.length, addBlock.length);
-    for (let p = 0; p < paired; p++) {
-      if (side === 'left') lines.push(delBlock[p].la - 1);
-      if (side === 'right') lines.push(addBlock[p].lb - 1);
-    }
-    for (let p = paired; p < delBlock.length; p++) {
-      if (side === 'left') lines.push(delBlock[p].la - 1);
-    }
-    for (let p = paired; p < addBlock.length; p++) {
-      if (side === 'right') lines.push(addBlock[p].lb - 1);
-    }
+  for (const e of diff) {
+    if (side === 'left' && e.type === 'del') lines.push(e.la - 1);
+    if (side === 'right' && e.type === 'add') lines.push(e.lb - 1);
   }
   return lines.sort((a, b) => a - b);
 }

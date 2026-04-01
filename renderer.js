@@ -54,10 +54,10 @@ function buildLineSpans(count, statuses, prefix) {
   for (let i = 0; i < count; i++) {
     const cls = statuses[i];
     if (prefix === 'line-num') {
-      const marker = cls ? '+' : '';
-      parts[i] = `<span class="${prefix} ${cls ? 'diff-add' : ''}">${marker}${i + 1}</span>`;
+      const marker = cls === 'add' ? '+' : cls === 'del' ? '-' : '';
+      parts[i] = `<span class="${prefix} ${cls ? 'diff-' + cls : ''}">${marker}${i + 1}</span>`;
     } else {
-      parts[i] = `<span class="${prefix} ${cls ? 'hl-add' : ''}">\n</span>`;
+      parts[i] = `<span class="${prefix} ${cls ? 'hl-' + cls : ''}">\n</span>`;
     }
   }
   return parts.join('');
@@ -169,7 +169,7 @@ function renderPreviewWithDiff(side) {
   const statuses = new Array(lines.length).fill('');
 
   for (const e of diff) {
-    if (side === 'left' && e.type === 'del') statuses[e.la - 1] = 'add';
+    if (side === 'left' && e.type === 'del') statuses[e.la - 1] = 'del';
     if (side === 'right' && e.type === 'add') statuses[e.lb - 1] = 'add';
   }
 
@@ -196,14 +196,17 @@ function renderPreviewWithDiff(side) {
     }
 
     if (inTable) inTable = false;
-    if (statuses[i]) return '\x00DIFFADD\x00' + line + '\x00/DIFFADD\x00';
+    if (statuses[i] === 'add') return '\x00DIFFADD\x00' + line + '\x00/DIFFADD\x00';
+    if (statuses[i] === 'del') return '\x00DIFFDEL\x00' + line + '\x00/DIFFDEL\x00';
     return line;
   });
 
   let html = renderMarkdown(markedLines.join('\n'));
   html = html
     .replace(/\x00DIFFADD\x00/g, '<span class="diff-mark-added">')
-    .replace(/\x00\/DIFFADD\x00/g, '</span>');
+    .replace(/\x00\/DIFFADD\x00/g, '</span>')
+    .replace(/\x00DIFFDEL\x00/g, '<span class="diff-mark-removed">')
+    .replace(/\x00\/DIFFDEL\x00/g, '</span>');
 
   // Diff-Klassen auf Tabellenzeilen anwenden
   if (tableRowDiffs.length) {
@@ -214,7 +217,7 @@ function renderPreviewWithDiff(side) {
       if (tables[d.table]) {
         const rows = tables[d.table].querySelectorAll('tr');
         if (rows[d.row]) {
-          rows[d.row].classList.add('diff-tr-added');
+          rows[d.row].classList.add(d.status === 'add' ? 'diff-tr-added' : 'diff-tr-removed');
         }
       }
     }
@@ -234,18 +237,10 @@ function updateGutters() {
     data[side] = { lines, statuses: new Array(lines.length).fill('') };
   }
 
-  let changes = 0;
+  let adds = 0, dels = 0;
   for (const e of diff) {
-    if (e.type === 'del') {
-      // Links hat diese Zeile, rechts nicht → links grün (hat extra), rechts nicht markiert
-      data.left.statuses[e.la - 1] = 'add';
-      changes++;
-    }
-    if (e.type === 'add') {
-      // Rechts hat diese Zeile, links nicht → rechts grün (hat extra), links nicht markiert
-      data.right.statuses[e.lb - 1] = 'add';
-      changes++;
-    }
+    if (e.type === 'del') { data.left.statuses[e.la - 1] = 'del'; dels++; }
+    if (e.type === 'add') { data.right.statuses[e.lb - 1] = 'add'; adds++; }
   }
 
   for (const side of SIDES) {
@@ -254,8 +249,8 @@ function updateGutters() {
     el('highlight', side).innerHTML = buildLineSpans(lines.length, statuses, 'hl-line');
   }
 
-  els.diffStats.innerHTML = changes
-    ? `<span class="add">${changes} Unterschiede</span>`
+  els.diffStats.innerHTML = adds || dels
+    ? `<span class="add">+${adds}</span> <span class="del">-${dels}</span>`
     : '';
 
   updateDeltaButtons();

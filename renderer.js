@@ -169,7 +169,7 @@ function renderPreviewWithDiff(side) {
   const statuses = new Array(lines.length).fill('');
 
   for (const e of diff) {
-    if (side === 'left' && e.type === 'del') statuses[e.la - 1] = 'del';
+    if (side === 'left' && e.type === 'del') statuses[e.la - 1] = 'add';
     if (side === 'right' && e.type === 'add') statuses[e.lb - 1] = 'add';
   }
 
@@ -196,17 +196,14 @@ function renderPreviewWithDiff(side) {
     }
 
     if (inTable) inTable = false;
-    if (statuses[i] === 'add') return '\x00DIFFADD\x00' + line + '\x00/DIFFADD\x00';
-    if (statuses[i] === 'del') return '\x00DIFFDEL\x00' + line + '\x00/DIFFDEL\x00';
+    if (statuses[i]) return '\x00DIFFADD\x00' + line + '\x00/DIFFADD\x00';
     return line;
   });
 
   let html = renderMarkdown(markedLines.join('\n'));
   html = html
     .replace(/\x00DIFFADD\x00/g, '<span class="diff-mark-added">')
-    .replace(/\x00\/DIFFADD\x00/g, '</span>')
-    .replace(/\x00DIFFDEL\x00/g, '<span class="diff-mark-removed">')
-    .replace(/\x00\/DIFFDEL\x00/g, '</span>');
+    .replace(/\x00\/DIFFADD\x00/g, '</span>');
 
   // Diff-Klassen auf Tabellenzeilen anwenden
   if (tableRowDiffs.length) {
@@ -217,7 +214,7 @@ function renderPreviewWithDiff(side) {
       if (tables[d.table]) {
         const rows = tables[d.table].querySelectorAll('tr');
         if (rows[d.row]) {
-          rows[d.row].classList.add(d.status === 'add' ? 'diff-tr-added' : 'diff-tr-removed');
+          rows[d.row].classList.add('diff-tr-added');
         }
       }
     }
@@ -237,10 +234,10 @@ function updateGutters() {
     data[side] = { lines, statuses: new Array(lines.length).fill('') };
   }
 
-  let adds = 0, dels = 0;
+  let diffs = 0;
   for (const e of diff) {
-    if (e.type === 'del') { data.left.statuses[e.la - 1] = 'del'; dels++; }
-    if (e.type === 'add') { data.right.statuses[e.lb - 1] = 'add'; adds++; }
+    if (e.type === 'del') { data.left.statuses[e.la - 1] = 'add'; diffs++; }
+    if (e.type === 'add') { data.right.statuses[e.lb - 1] = 'add'; diffs++; }
   }
 
   for (const side of SIDES) {
@@ -249,8 +246,8 @@ function updateGutters() {
     el('highlight', side).innerHTML = buildLineSpans(lines.length, statuses, 'hl-line');
   }
 
-  els.diffStats.innerHTML = adds || dels
-    ? `<span class="add">+${adds}</span> <span class="del">-${dels}</span>`
+  els.diffStats.innerHTML = diffs
+    ? `<span class="add">${diffs} Unterschiede</span>`
     : '';
 
   updateDeltaButtons();

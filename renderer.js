@@ -163,6 +163,33 @@ function getCachedDiff() {
   return state.lastDiffResult;
 }
 
+function renderPreviewWithDiff(side) {
+  const diff = getCachedDiff();
+  const lines = (state[side].content || '').split('\n');
+  const statuses = new Array(lines.length).fill('');
+
+  for (const e of diff) {
+    if (side === 'left' && e.type === 'del') statuses[e.la - 1] = 'del';
+    if (side === 'right' && e.type === 'add') statuses[e.lb - 1] = 'add';
+  }
+
+  // Zeilen mit Diff-Markern umschließen vor dem Rendern
+  const markedMd = lines.map((line, i) => {
+    if (statuses[i] === 'add') return '\x00DIFFADD\x00' + line + '\x00/DIFFADD\x00';
+    if (statuses[i] === 'del') return '\x00DIFFDEL\x00' + line + '\x00/DIFFDEL\x00';
+    return line;
+  }).join('\n');
+
+  let html = renderMarkdown(markedMd);
+  html = html
+    .replace(/\x00DIFFADD\x00/g, '<span class="diff-mark-added">')
+    .replace(/\x00\/DIFFADD\x00/g, '</span>')
+    .replace(/\x00DIFFDEL\x00/g, '<span class="diff-mark-removed">')
+    .replace(/\x00\/DIFFDEL\x00/g, '</span>');
+
+  return html;
+}
+
 /* ─── Gutter + Highlight ─────────────────────────────────────── */
 function updateGutters() {
   const diff = getCachedDiff();
@@ -243,7 +270,7 @@ els.previewToggle.addEventListener('click', () => {
     if (state.preview) {
       ew.classList.add('hidden');
       pw.classList.add('visible');
-      el('preview', side).innerHTML = renderMarkdown(state[side].content);
+      el('preview', side).innerHTML = renderPreviewWithDiff(side);
       requestAnimationFrame(() => requestAnimationFrame(() => {
         el('preview', side).scrollTop = ratio * (el('preview', side).scrollHeight - el('preview', side).clientHeight);
       }));
@@ -281,7 +308,7 @@ function setupEditor(side) {
     if (state.preview) {
       clearTimeout(previewTimer);
       previewTimer = setTimeout(() => {
-        el('preview', side).innerHTML = renderMarkdown(state[side].content);
+        el('preview', side).innerHTML = renderPreviewWithDiff(side);
       }, 150);
     }
   });
@@ -343,7 +370,7 @@ function loadContent(side, content, filePath, dirty) {
   updateSaveBtn(side);
   updateGutters();
   if (state.preview) {
-    el('preview', side).innerHTML = renderMarkdown(content);
+    el('preview', side).innerHTML = renderPreviewWithDiff(side);
   }
 }
 
@@ -463,14 +490,21 @@ function buildToc(side) {
 
 function scrollToLine(side, lineIndex) {
   const editor = el('editor', side);
-  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight);
-  editor.scrollTop = lineIndex * lineHeight;
   const content = state[side].content;
+  const totalLines = content.split('\n').length;
+
+  // Cursor-Position berechnen
   let pos = 0;
   for (let i = 0; i < lineIndex; i++) {
     const nl = content.indexOf('\n', pos);
     pos = nl === -1 ? content.length : nl + 1;
   }
+
+  // Scroll-Position: Verhältnis der Zielzeile zur Gesamtzeilenzahl
+  const ratio = lineIndex / (totalLines - 1 || 1);
+  const maxScroll = editor.scrollHeight - editor.clientHeight;
+  editor.scrollTop = ratio * maxScroll;
+
   editor.focus();
   editor.setSelectionRange(pos, pos);
 }

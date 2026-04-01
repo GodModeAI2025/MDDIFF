@@ -1,10 +1,12 @@
+const SIDES = ['left', 'right'];
+
 const state = {
   left:  { filePath: null, content: '', dirty: false },
   right: { filePath: null, content: '', dirty: false },
   preview: false,
   theme: 'dark',
-  lastDiffKey: null,
-  lastDiffKeyLen: 0,
+  diffGen: 0,
+  lastDiffGen: -1,
   lastDiffResult: null
 };
 
@@ -32,7 +34,6 @@ const els = {
   historyDropdown:  document.getElementById('historyDropdown'),
 };
 
-/* ─── Helpers ───────────────────────────────────────────────── */
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function el(prefix, side) { return els[`${prefix}${cap(side)}`]; }
 function basename(p) { return p ? p.split('/').pop() : null; }
@@ -48,6 +49,17 @@ function insertTab(ta) {
   ta.dispatchEvent(new Event('input'));
 }
 
+function buildLineSpans(count, statuses, prefix) {
+  const parts = new Array(count);
+  for (let i = 0; i < count; i++) {
+    const cls = statuses[i];
+    parts[i] = prefix === 'line-num'
+      ? `<span class="${prefix} ${cls ? 'diff-' + cls : ''}">${i + 1}</span>`
+      : `<span class="${prefix} ${cls ? 'hl-' + cls : ''}">\n</span>`;
+  }
+  return parts.join('');
+}
+
 /* ─── Theme ─────────────────────────────────────────────────── */
 els.themeToggle.addEventListener('click', () => {
   state.theme = state.theme === 'dark' ? 'light' : 'dark';
@@ -60,7 +72,7 @@ function renderMarkdown(md) {
   const codeBlocks = [];
   md = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     codeBlocks.push(`<pre><code class="lang-${lang}">${escapeHtml(code)}</code></pre>`);
-    return `%%CB_${codeBlocks.length - 1}%%`;
+    return `\x00CB${codeBlocks.length - 1}\x00`;
   });
 
   const lines = md.split('\n');
@@ -97,7 +109,7 @@ function renderMarkdown(md) {
   html = html.replace(/\n{2,}/g, '</p><p>');
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/((?:<li>.*?<\/li>(?:<br>)?)+)/g, '<ul>$1</ul>');
-  codeBlocks.forEach((b, idx) => { html = html.replace(`%%CB_${idx}%%`, b); });
+  codeBlocks.forEach((b, idx) => { html = html.replace(`\x00CB${idx}\x00`, b); });
   return '<p>' + html + '</p>';
 }
 
@@ -118,7 +130,7 @@ function buildTable(lines) {
   return h + '</table>';
 }
 
-/* ─── Diff Engine ────────────────────────────────────────────── */
+/* ─── Diff Engine (cached via generation counter) ────────────── */
 function computeDiff(a, b) {
   const la = a.split('\n'), lb = b.split('\n');
   const m = la.length, n = lb.length;
@@ -142,54 +154,33 @@ function computeDiff(a, b) {
 }
 
 function getCachedDiff() {
-  const kl = (state.left.content || '').length + (state.right.content || '').length;
-  if (state.lastDiffKeyLen === kl) {
-    const k = state.left.content + '\0' + state.right.content;
-    if (state.lastDiffKey === k) return state.lastDiffResult;
-  }
-  const k = state.left.content + '\0' + state.right.content;
-  state.lastDiffKey = k;
-  state.lastDiffKeyLen = kl;
+  if (state.lastDiffGen === state.diffGen) return state.lastDiffResult;
+  state.lastDiffGen = state.diffGen;
   state.lastDiffResult = computeDiff(state.left.content || '', state.right.content || '');
   return state.lastDiffResult;
 }
 
-/* ─── Gutter (line numbers + diff colors) ────────────────────── */
+/* ─── Gutter + Highlight ─────────────────────────────────────── */
 function updateGutters() {
   const diff = getCachedDiff();
+  const data = {};
 
-  const leftLines = (state.left.content || '').split('\n');
-  const rightLines = (state.right.content || '').split('\n');
-  const leftStatus = new Array(leftLines.length).fill('');
-  const rightStatus = new Array(rightLines.length).fill('');
+  for (const side of SIDES) {
+    const lines = (state[side].content || '').split('\n');
+    data[side] = { lines, statuses: new Array(lines.length).fill('') };
+  }
 
   let adds = 0, dels = 0;
   for (const e of diff) {
-    if (e.type === 'del') { leftStatus[e.la - 1] = 'del'; dels++; }
-    if (e.type === 'add') { rightStatus[e.lb - 1] = 'add'; adds++; }
+    if (e.type === 'del') { data.left.statuses[e.la - 1] = 'del'; dels++; }
+    if (e.type === 'add') { data.right.statuses[e.lb - 1] = 'add'; adds++; }
   }
 
-  // Gutter line numbers
-  els.gutterLeft.innerHTML = leftLines.map((_, i) =>
-    `<span class="line-num ${leftStatus[i] ? 'diff-' + leftStatus[i] : ''}">${i + 1}</span>`
-  ).join('');
-
-  els.gutterRight.innerHTML = rightLines.map((_, i) =>
-    `<span class="line-num ${rightStatus[i] ? 'diff-' + rightStatus[i] : ''}">${i + 1}</span>`
-  ).join('');
-
-  // Highlight overlay behind textarea
-  els.highlightLeft.innerHTML = leftLines.map((_, i) =>
-    `<span class="hl-line ${leftStatus[i] ? 'hl-' + leftStatus[i] : ''}">\n</span>`
-  ).join('');
-
-  els.highlightRight.innerHTML = rightLines.map((_, i) =>
-    `<span class="hl-line ${rightStatus[i] ? 'hl-' + rightStatus[i] : ''}">\n</span>`
-  ).join('');
-
-  // Sync highlight scroll position with textarea
-  els.highlightLeft.style.top = -els.editorLeft.scrollTop + 'px';
-  els.highlightRight.style.top = -els.editorRight.scrollTop + 'px';
+  for (const side of SIDES) {
+    const { lines, statuses } = data[side];
+    el('gutter', side).innerHTML = buildLineSpans(lines.length, statuses, 'line-num');
+    el('highlight', side).innerHTML = buildLineSpans(lines.length, statuses, 'hl-line');
+  }
 
   els.diffStats.innerHTML = adds || dels
     ? `<span class="add">+${adds}</span><span class="del">-${dels}</span>`
@@ -206,8 +197,11 @@ function updateGuttersDebounced() {
 let scrolling = false;
 
 function syncScroll(src, targets) {
+  let lastTop = src.scrollTop;
   src.addEventListener('scroll', () => {
     if (scrolling) return;
+    if (src.scrollTop === lastTop) return;
+    lastTop = src.scrollTop;
     scrolling = true;
     const ratio = src.scrollTop / (src.scrollHeight - src.clientHeight || 1);
     for (const t of targets) {
@@ -217,66 +211,56 @@ function syncScroll(src, targets) {
   });
 }
 
-// Editor scroll syncs: other editor + both gutters
 syncScroll(els.editorLeft, [els.editorRight, els.gutterLeft, els.gutterRight]);
 syncScroll(els.editorRight, [els.editorLeft, els.gutterLeft, els.gutterRight]);
-
-// Preview scroll syncs
 syncScroll(els.previewLeft, [els.previewRight]);
 syncScroll(els.previewRight, [els.previewLeft]);
 
 /* ─── Preview Toggle ─────────────────────────────────────────── */
-// Speichert die Scroll-Ratio pro Seite über den Toggle hinweg
 const scrollRatios = { left: 0, right: 0 };
 
+function getScrollRatio(element) {
+  const max = element.scrollHeight - element.clientHeight;
+  return max > 0 ? element.scrollTop / max : 0;
+}
+
 els.previewToggle.addEventListener('click', () => {
-  // Aktuelle Scroll-Position merken BEVOR umgeschaltet wird
-  ['left', 'right'].forEach(side => {
-    if (state.preview) {
-      const preview = el('preview', side);
-      const max = preview.scrollHeight - preview.clientHeight;
-      scrollRatios[side] = max > 0 ? preview.scrollTop / max : 0;
-    } else {
-      const editor = el('editor', side);
-      const max = editor.scrollHeight - editor.clientHeight;
-      scrollRatios[side] = max > 0 ? editor.scrollTop / max : 0;
-    }
-  });
+  for (const side of SIDES) {
+    scrollRatios[side] = getScrollRatio(state.preview ? el('preview', side) : el('editor', side));
+  }
 
   state.preview = !state.preview;
   els.previewToggle.classList.toggle('active', state.preview);
 
-  ['left', 'right'].forEach(side => {
+  for (const side of SIDES) {
     const ew = el('editorWrapper', side);
     const pw = el('previewWrapper', side);
-    const editor = el('editor', side);
-    const preview = el('preview', side);
     const ratio = scrollRatios[side];
 
     if (state.preview) {
       ew.classList.add('hidden');
       pw.classList.add('visible');
-      preview.innerHTML = renderMarkdown(state[side].content);
-      // Doppelter rAF: erst nach Layout-Berechnung scrollen
+      el('preview', side).innerHTML = renderMarkdown(state[side].content);
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
+        el('preview', side).scrollTop = ratio * (el('preview', side).scrollHeight - el('preview', side).clientHeight);
       }));
     } else {
       ew.classList.remove('hidden');
       pw.classList.remove('visible');
       requestAnimationFrame(() => requestAnimationFrame(() => {
+        const editor = el('editor', side);
         editor.scrollTop = ratio * (editor.scrollHeight - editor.clientHeight);
         editor.focus();
       }));
     }
-  });
+  }
 });
 
 /* ─── Input Handling ──────────────────────────────────────────── */
 function updateContent(side, content) {
   state[side].content = content;
   state[side].dirty = true;
-  state.lastDiffKey = null;
+  state.diffGen++;
   updateFileName(side);
   updateSaveBtn(side);
 }
@@ -284,6 +268,7 @@ function updateContent(side, content) {
 function setupEditor(side) {
   const editor = el('editor', side);
   const gutter = el('gutter', side);
+  const highlight = el('highlight', side);
 
   editor.addEventListener('input', () => {
     updateContent(side, editor.value);
@@ -295,7 +280,7 @@ function setupEditor(side) {
 
   editor.addEventListener('scroll', () => {
     gutter.scrollTop = editor.scrollTop;
-    el('highlight', side).style.top = -editor.scrollTop + 'px';
+    highlight.style.top = -editor.scrollTop + 'px';
   });
 
   editor.addEventListener('keydown', (e) => {
@@ -337,7 +322,6 @@ async function saveFile(side) {
   }
 }
 
-// Menu-triggered save
 window.api.onSaveFile((side) => saveFile(side));
 
 /* ─── Load Content ────────────────────────────────────────────── */
@@ -345,7 +329,7 @@ function loadContent(side, content, filePath, dirty) {
   state[side].content = content;
   state[side].filePath = filePath;
   state[side].dirty = dirty;
-  state.lastDiffKey = null;
+  state.diffGen++;
   el('editor', side).value = content;
   updateFileName(side);
   updateSaveBtn(side);
@@ -362,7 +346,7 @@ window.api.onFileOpened(({ side, filePath, content }) => {
 });
 
 /* ─── Drag & Drop ─────────────────────────────────────────────── */
-['left', 'right'].forEach(side => {
+for (const side of SIDES) {
   const panel = document.getElementById(`panel${cap(side)}`);
   panel.addEventListener('dragover', (e) => { e.preventDefault(); panel.classList.add('drag-over'); });
   panel.addEventListener('dragleave', () => panel.classList.remove('drag-over'));
@@ -376,7 +360,7 @@ window.api.onFileOpened(({ side, filePath, content }) => {
       reader.readAsText(file);
     }
   });
-});
+}
 
 /* ─── History ─────────────────────────────────────────────────── */
 let compareHistory = [];
@@ -425,15 +409,13 @@ els.historyBtn.addEventListener('click', (e) => {
   els.historyDropdown.classList.toggle('open');
 });
 
-document.addEventListener('click', () => els.historyDropdown.classList.remove('open'));
-
 els.historyDropdown.addEventListener('click', async (e) => {
   const item = e.target.closest('.history-item');
   if (!item) return;
   const entry = compareHistory[parseInt(item.dataset.index)];
   if (!entry) return;
   els.historyDropdown.classList.remove('open');
-  await Promise.all(['left', 'right'].map(async (side) => {
+  await Promise.all(SIDES.map(async (side) => {
     if (entry[side]) {
       const r = await window.api.readFile(entry[side]);
       if (r.success) loadContent(side, r.content, entry[side], false);
@@ -441,10 +423,12 @@ els.historyDropdown.addEventListener('click', async (e) => {
   }));
 });
 
-/* ─── Init ────────────────────────────────────────────────────── */
+/* ─── Open Two Files ──────────────────────────────────────────── */
 document.getElementById('openTwoBtn').addEventListener('click', () => window.api.openTwoFiles());
+document.getElementById('openLeft').addEventListener('click', () => window.api.openFile('left'));
+document.getElementById('openRight').addEventListener('click', () => window.api.openFile('right'));
 
-/* ─── TOC (Inhaltsverzeichnis) ────────────────────────────────── */
+/* ─── TOC ─────────────────────────────────────────────────────── */
 function buildToc(side) {
   const lines = (state[side].content || '').split('\n');
   const headings = [];
@@ -454,9 +438,7 @@ function buildToc(side) {
     if (line.trimStart().startsWith('```')) inCodeBlock = !inCodeBlock;
     if (inCodeBlock) return;
     const match = line.match(/^(#{1,6})\s+(.+)$/);
-    if (match) {
-      headings.push({ level: match[1].length, text: match[2], line: i });
-    }
+    if (match) headings.push({ level: match[1].length, text: match[2], line: i });
   });
 
   const dropdown = document.getElementById(`toc${cap(side)}`);
@@ -475,20 +457,20 @@ function scrollToLine(side, lineIndex) {
   const editor = el('editor', side);
   const lineHeight = parseFloat(getComputedStyle(editor).lineHeight);
   editor.scrollTop = lineIndex * lineHeight;
-  // Cursor an den Zeilenanfang setzen
-  const lines = editor.value.split('\n');
+  const content = state[side].content;
   let pos = 0;
-  for (let i = 0; i < lineIndex && i < lines.length; i++) pos += lines[i].length + 1;
+  for (let i = 0; i < lineIndex; i++) {
+    const nl = content.indexOf('\n', pos);
+    pos = nl === -1 ? content.length : nl + 1;
+  }
   editor.focus();
   editor.setSelectionRange(pos, pos);
 }
 
-// TOC button clicks
 document.querySelectorAll('.toc-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     const side = btn.dataset.side;
-    // Close other TOC
     document.querySelectorAll('.toc-dropdown').forEach(d => {
       if (d.id !== `toc${cap(side)}`) d.classList.remove('open');
     });
@@ -497,7 +479,6 @@ document.querySelectorAll('.toc-btn').forEach(btn => {
   });
 });
 
-// TOC item clicks
 document.querySelectorAll('.toc-dropdown').forEach(dropdown => {
   dropdown.addEventListener('click', (e) => {
     const item = e.target.closest('.toc-item');
@@ -507,11 +488,8 @@ document.querySelectorAll('.toc-dropdown').forEach(dropdown => {
     dropdown.classList.remove('open');
 
     if (state.preview) {
-      // In Preview: scroll to heading element
-      const preview = el('preview', side);
-      const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
-      const tocItems = Array.from(dropdown.querySelectorAll('.toc-item'));
-      const idx = tocItems.indexOf(item);
+      const headings = el('preview', side).querySelectorAll('h1, h2, h3, h4, h5, h6');
+      const idx = Array.from(dropdown.querySelectorAll('.toc-item')).indexOf(item);
       if (headings[idx]) headings[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
       scrollToLine(side, lineIndex);
@@ -519,10 +497,12 @@ document.querySelectorAll('.toc-dropdown').forEach(dropdown => {
   });
 });
 
-// Close TOC on outside click
+// Close all dropdowns on outside click
 document.addEventListener('click', () => {
+  els.historyDropdown.classList.remove('open');
   document.querySelectorAll('.toc-dropdown').forEach(d => d.classList.remove('open'));
 });
 
+/* ─── Init ────────────────────────────────────────────────────── */
 updateGutters();
 initHistory();

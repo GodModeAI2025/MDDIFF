@@ -135,24 +135,20 @@ async function saveToPath(filePath, content) {
   return { success: true, filePath };
 }
 
-ipcMain.handle('save-file', async (_event, { filePath, content }) => {
-  if (filePath) return saveToPath(filePath, content);
+async function saveWithDialog(content) {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Markdown-Datei speichern',
     filters: SAVE_FILTERS,
   });
   if (!result.canceled) return saveToPath(result.filePath, content);
   return { success: false };
+}
+
+ipcMain.handle('save-file', async (_event, { filePath, content }) => {
+  return filePath ? saveToPath(filePath, content) : saveWithDialog(content);
 });
 
-ipcMain.handle('save-file-as', async (_event, { content }) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Markdown-Datei speichern unter…',
-    filters: SAVE_FILTERS,
-  });
-  if (!result.canceled) return saveToPath(result.filePath, content);
-  return { success: false };
-});
+ipcMain.handle('save-file-as', async (_event, { content }) => saveWithDialog(content));
 
 ipcMain.handle('read-file', async (_event, filePath) => {
   try {

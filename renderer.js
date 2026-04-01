@@ -226,7 +226,23 @@ syncScroll(els.previewLeft, [els.previewRight]);
 syncScroll(els.previewRight, [els.previewLeft]);
 
 /* ─── Preview Toggle ─────────────────────────────────────────── */
+// Speichert die Scroll-Ratio pro Seite über den Toggle hinweg
+const scrollRatios = { left: 0, right: 0 };
+
 els.previewToggle.addEventListener('click', () => {
+  // Aktuelle Scroll-Position merken BEVOR umgeschaltet wird
+  ['left', 'right'].forEach(side => {
+    if (state.preview) {
+      const preview = el('preview', side);
+      const max = preview.scrollHeight - preview.clientHeight;
+      scrollRatios[side] = max > 0 ? preview.scrollTop / max : 0;
+    } else {
+      const editor = el('editor', side);
+      const max = editor.scrollHeight - editor.clientHeight;
+      scrollRatios[side] = max > 0 ? editor.scrollTop / max : 0;
+    }
+  });
+
   state.preview = !state.preview;
   els.previewToggle.classList.toggle('active', state.preview);
 
@@ -235,27 +251,23 @@ els.previewToggle.addEventListener('click', () => {
     const pw = el('previewWrapper', side);
     const editor = el('editor', side);
     const preview = el('preview', side);
-
-    // Scroll-Position merken (als Ratio)
-    const scrollRatio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight || 1);
+    const ratio = scrollRatios[side];
 
     if (state.preview) {
       ew.classList.add('hidden');
       pw.classList.add('visible');
       preview.innerHTML = renderMarkdown(state[side].content);
-      // Scroll-Position auf Preview übertragen
-      requestAnimationFrame(() => {
-        preview.scrollTop = scrollRatio * (preview.scrollHeight - preview.clientHeight);
-      });
+      // Doppelter rAF: erst nach Layout-Berechnung scrollen
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
+      }));
     } else {
-      // Scroll-Position aus Preview merken
-      const previewRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight || 1);
       ew.classList.remove('hidden');
       pw.classList.remove('visible');
-      requestAnimationFrame(() => {
-        editor.scrollTop = previewRatio * (editor.scrollHeight - editor.clientHeight);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        editor.scrollTop = ratio * (editor.scrollHeight - editor.clientHeight);
         editor.focus();
-      });
+      }));
     }
   });
 });

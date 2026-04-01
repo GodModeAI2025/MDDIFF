@@ -233,13 +233,29 @@ els.previewToggle.addEventListener('click', () => {
   ['left', 'right'].forEach(side => {
     const ew = el('editorWrapper', side);
     const pw = el('previewWrapper', side);
+    const editor = el('editor', side);
+    const preview = el('preview', side);
+
+    // Scroll-Position merken (als Ratio)
+    const scrollRatio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight || 1);
+
     if (state.preview) {
       ew.classList.add('hidden');
       pw.classList.add('visible');
-      el('preview', side).innerHTML = renderMarkdown(state[side].content);
+      preview.innerHTML = renderMarkdown(state[side].content);
+      // Scroll-Position auf Preview übertragen
+      requestAnimationFrame(() => {
+        preview.scrollTop = scrollRatio * (preview.scrollHeight - preview.clientHeight);
+      });
     } else {
+      // Scroll-Position aus Preview merken
+      const previewRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight || 1);
       ew.classList.remove('hidden');
       pw.classList.remove('visible');
+      requestAnimationFrame(() => {
+        editor.scrollTop = previewRatio * (editor.scrollHeight - editor.clientHeight);
+        editor.focus();
+      });
     }
   });
 });
@@ -414,5 +430,7 @@ els.historyDropdown.addEventListener('click', async (e) => {
 });
 
 /* ─── Init ────────────────────────────────────────────────────── */
+document.getElementById('openTwoBtn').addEventListener('click', () => window.api.openTwoFiles());
+
 updateGutters();
 initHistory();

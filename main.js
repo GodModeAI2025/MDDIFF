@@ -128,6 +128,7 @@ async function openTwoFiles() {
 }
 
 ipcMain.handle('open-file', (_event, side) => openFile(side));
+ipcMain.handle('open-two-files', () => openTwoFiles());
 
 async function saveToPath(filePath, content) {
   await fs.writeFile(filePath, content, 'utf-8');

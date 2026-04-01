@@ -55,17 +55,13 @@ function buildLineSpans(count, statuses, prefix) {
     const s = statuses[i];
     if (prefix === 'line-num') {
       let marker = '', cls = '';
-      if (s === 'add') { marker = '+'; cls = 'diff-add'; }
-      else if (s === 'del') { marker = '-'; cls = 'diff-del'; }
-      else if (s === 'mod-del') { marker = '~'; cls = 'diff-mod'; }
-      else if (s === 'mod-add') { marker = '~'; cls = 'diff-mod'; }
+      if (s === 'add' || s === 'mod-add') { marker = '+'; cls = 'diff-add'; }
+      else if (s === 'del' || s === 'mod-del') { marker = '-'; cls = 'diff-del'; }
       parts[i] = `<span class="${prefix} ${cls}">${marker}${i + 1}</span>`;
     } else {
       let cls = '';
-      if (s === 'add') cls = 'hl-add';
-      else if (s === 'del') cls = 'hl-del';
-      else if (s === 'mod-del') cls = 'hl-mod-del';
-      else if (s === 'mod-add') cls = 'hl-mod-add';
+      if (s === 'add' || s === 'mod-add') cls = 'hl-add';
+      else if (s === 'del' || s === 'mod-del') cls = 'hl-del';
       parts[i] = `<span class="${prefix} ${cls}">\n</span>`;
     }
   }
@@ -187,8 +183,8 @@ function renderPreviewWithDiff(side) {
     while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
     const paired = Math.min(delBlock.length, addBlock.length);
     for (let p = 0; p < paired; p++) {
-      if (side === 'left') statuses[delBlock[p].la - 1] = 'mod';
-      if (side === 'right') statuses[addBlock[p].lb - 1] = 'mod';
+      if (side === 'left') statuses[delBlock[p].la - 1] = 'mod-del';
+      if (side === 'right') statuses[addBlock[p].lb - 1] = 'mod-add';
     }
     for (let p = paired; p < delBlock.length; p++) {
       if (side === 'left') statuses[delBlock[p].la - 1] = 'del';
@@ -221,9 +217,8 @@ function renderPreviewWithDiff(side) {
     }
 
     if (inTable) inTable = false;
-    if (statuses[i] === 'add') return '\x00DA\x00' + line + '\x00/DA\x00';
-    if (statuses[i] === 'del') return '\x00DD\x00' + line + '\x00/DD\x00';
-    if (statuses[i] === 'mod') return '\x00DM\x00' + line + '\x00/DM\x00';
+    if (statuses[i] === 'add' || statuses[i] === 'mod-add') return '\x00DA\x00' + line + '\x00/DA\x00';
+    if (statuses[i] === 'del' || statuses[i] === 'mod-del') return '\x00DD\x00' + line + '\x00/DD\x00';
     return line;
   });
 
@@ -306,9 +301,10 @@ function updateGutters() {
     el('highlight', side).innerHTML = buildLineSpans(lines.length, statuses, 'hl-line');
   }
 
-  const total = adds + dels + mods;
-  els.diffStats.innerHTML = total
-    ? `<span class="add">+${adds}</span> <span class="del">-${dels}</span> <span style="color:var(--yellow)">~${mods}</span>`
+  const totalAdds = adds + mods;
+  const totalDels = dels + mods;
+  els.diffStats.innerHTML = (totalAdds || totalDels)
+    ? `<span class="add">+${totalAdds}</span> <span class="del">-${totalDels}</span>`
     : '';
 
   updateDeltaButtons();

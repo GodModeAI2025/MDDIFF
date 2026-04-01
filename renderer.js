@@ -56,13 +56,11 @@ function buildLineSpans(count, statuses, prefix) {
     if (prefix === 'line-num') {
       let marker = '', cls = '';
       if (s === 'add') { marker = '+'; cls = 'diff-add'; }
-      else if (s === 'del') { marker = '-'; cls = 'diff-del'; }
       else if (s === 'mod') { marker = '~'; cls = 'diff-mod'; }
       parts[i] = `<span class="${prefix} ${cls}">${marker}${i + 1}</span>`;
     } else {
       let cls = '';
       if (s === 'add') cls = 'hl-add';
-      else if (s === 'del') cls = 'hl-del';
       else if (s === 'mod') cls = 'hl-mod';
       parts[i] = `<span class="${prefix} ${cls}">\n</span>`;
     }
@@ -222,13 +220,15 @@ function renderPreviewWithDiff(side) {
     while (i < diff.length && diff[i].type === 'del') { delBlock.push(diff[i]); i++; }
     const addBlock = [];
     while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
-    const paired = Math.min(delBlock.length, addBlock.length);
+    const paired = (delBlock.length > 0 && addBlock.length > 0)
+      ? Math.min(delBlock.length, addBlock.length) : 0;
     for (let p = 0; p < paired; p++) {
       if (side === 'left') statuses[delBlock[p].la - 1] = 'mod';
       if (side === 'right') statuses[addBlock[p].lb - 1] = 'mod';
     }
+    // Übrige: GRÜN (diese Seite hat mehr)
     for (let p = paired; p < delBlock.length; p++) {
-      if (side === 'left') statuses[delBlock[p].la - 1] = 'del';
+      if (side === 'left') statuses[delBlock[p].la - 1] = 'add';
     }
     for (let p = paired; p < addBlock.length; p++) {
       if (side === 'right') statuses[addBlock[p].lb - 1] = 'add';
@@ -259,7 +259,6 @@ function renderPreviewWithDiff(side) {
 
     if (inTable) inTable = false;
     if (statuses[i] === 'add') return '\x00DA\x00' + line + '\x00/DA\x00';
-    if (statuses[i] === 'del') return '\x00DD\x00' + line + '\x00/DD\x00';
     if (statuses[i] === 'mod') return '\x00DM\x00' + line + '\x00/DM\x00';
     return line;
   });
@@ -317,21 +316,23 @@ function updateGutters() {
     const addBlock = [];
     while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
 
-    // del+add Paare = Modifikation (gelb ~)
-    const paired = Math.min(delBlock.length, addBlock.length);
+    // Nur paaren wenn BEIDE Blöcke Einträge haben (echte Modifikation)
+    const paired = (delBlock.length > 0 && addBlock.length > 0)
+      ? Math.min(delBlock.length, addBlock.length) : 0;
+
     for (let p = 0; p < paired; p++) {
       data.left.statuses[delBlock[p].la - 1] = 'mod';
       data.right.statuses[addBlock[p].lb - 1] = 'mod';
       mods++;
     }
 
-    // Übrige del = reine Löschung (rot auf links)
+    // Übrige del = Zeile nur links vorhanden → GRÜN auf links (hat mehr)
     for (let p = paired; p < delBlock.length; p++) {
-      data.left.statuses[delBlock[p].la - 1] = 'del';
+      data.left.statuses[delBlock[p].la - 1] = 'add';
       dels++;
     }
 
-    // Übrige add = reine Hinzufügung (grün +)
+    // Übrige add = Zeile nur rechts vorhanden → GRÜN auf rechts (hat mehr)
     for (let p = paired; p < addBlock.length; p++) {
       data.right.statuses[addBlock[p].lb - 1] = 'add';
       adds++;
@@ -377,10 +378,7 @@ function updateGutters() {
         return `<span class="hl-line hl-mod">${wdHtml}\n</span>`;
       }
 
-      // Gelöschte Zeile (nur links)
-      if (s === 'del') return `<span class="hl-line hl-del">${text}\n</span>`;
-
-      // Neue Zeile (nur rechts)
+      // Zeile nur auf dieser Seite → GRÜN (hat mehr)
       if (s === 'add') return `<span class="hl-line hl-add">${text}\n</span>`;
 
       // Unverändert
@@ -389,10 +387,9 @@ function updateGutters() {
     el('highlight', side).innerHTML = hlParts.join('');
   }
 
-  const totalAdds = adds + mods;
-  const totalDels = dels + mods;
-  els.diffStats.innerHTML = (totalAdds || totalDels)
-    ? `<span class="add">+${totalAdds}</span> <span class="del">-${totalDels}</span>`
+  const total = adds + dels + mods;
+  els.diffStats.innerHTML = total
+    ? `<span class="add">+${adds + dels} Unterschiede</span> <span style="color:var(--yellow)">~${mods} Änderungen</span>`
     : '';
 
   updateDeltaButtons();

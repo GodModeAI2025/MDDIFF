@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MDDIFF – Markdown Diff Editor</title>
   <style>
-    /* ─── Theme Variables ─────────────────────────────────────── */
     :root[data-theme="dark"] {
       --bg: #1e1e2e;
       --bg-panel: #252536;
@@ -18,15 +17,15 @@
       --accent-hover: #74c7ec;
       --green: #a6e3a1;
       --green-bg: rgba(166, 227, 161, 0.10);
-      --green-bg-strong: rgba(166, 227, 161, 0.20);
+      --green-gutter: rgba(166, 227, 161, 0.25);
       --red: #f38ba8;
       --red-bg: rgba(243, 139, 168, 0.10);
-      --red-bg-strong: rgba(243, 139, 168, 0.20);
+      --red-gutter: rgba(243, 139, 168, 0.25);
       --yellow: #f9e2af;
-      --blue-bg: rgba(137, 180, 250, 0.08);
       --scrollbar: #45475a;
       --scrollbar-hover: #585b70;
       --code-bg: rgba(137, 180, 250, 0.12);
+      --gutter-bg: #21213a;
     }
 
     :root[data-theme="light"] {
@@ -40,16 +39,16 @@
       --accent: #1e66f5;
       --accent-hover: #2a7cfa;
       --green: #40a02b;
-      --green-bg: rgba(64, 160, 43, 0.10);
-      --green-bg-strong: rgba(64, 160, 43, 0.18);
+      --green-bg: rgba(64, 160, 43, 0.08);
+      --green-gutter: rgba(64, 160, 43, 0.20);
       --red: #d20f39;
-      --red-bg: rgba(210, 15, 57, 0.08);
-      --red-bg-strong: rgba(210, 15, 57, 0.16);
+      --red-bg: rgba(210, 15, 57, 0.06);
+      --red-gutter: rgba(210, 15, 57, 0.18);
       --yellow: #df8e1d;
-      --blue-bg: rgba(30, 102, 245, 0.06);
       --scrollbar: #acb0be;
       --scrollbar-hover: #9ca0b0;
       --code-bg: rgba(30, 102, 245, 0.08);
+      --gutter-bg: #d9dce5;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -64,20 +63,19 @@
       overflow: hidden;
     }
 
-    /* Top Bar */
+    /* ─── Top Bar ─────────────────────────────────────── */
     .top-bar {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 12px;
-      padding: 8px 16px;
+      gap: 10px;
+      padding: 6px 16px;
       background: var(--bg-toolbar);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
 
-    .top-bar .view-btn {
-      padding: 6px 18px;
+    .top-btn {
+      padding: 5px 14px;
       border: 1px solid var(--border);
       background: transparent;
       color: var(--text-muted);
@@ -86,14 +84,39 @@
       font-size: 13px;
       transition: all 0.15s;
     }
+    .top-btn:hover { color: var(--text); border-color: var(--accent); }
+    .top-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
 
-    .top-bar .view-btn:hover { color: var(--text); border-color: var(--accent); }
-    .top-bar .view-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
-    :root[data-theme="light"] .top-bar .view-btn.active { color: #fff; }
-
-    .history-wrapper {
-      position: relative;
+    .top-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
     }
+
+    .diff-stats {
+      font-size: 12px;
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .diff-stats .add { color: var(--green); font-weight: 600; }
+    .diff-stats .del { color: var(--red); font-weight: 600; }
+
+    .theme-toggle {
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      transition: all 0.15s;
+    }
+    .theme-toggle:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ─── History ──────────────────────────────────────── */
+    .history-wrapper { position: relative; }
 
     .history-dropdown {
       display: none;
@@ -105,12 +128,10 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       min-width: 320px;
-      max-width: 450px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.3);
       z-index: 100;
       overflow: hidden;
     }
-
     .history-dropdown.open { display: block; }
 
     .history-item {
@@ -123,83 +144,36 @@
       border-bottom: 1px solid var(--border);
       transition: background 0.1s;
     }
-
     .history-item:last-child { border-bottom: none; }
     .history-item:hover { background: var(--bg-toolbar); }
-
-    .history-item .history-files {
-      flex: 1;
-      overflow: hidden;
-    }
-
-    .history-item .history-file {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
+    .history-item .history-files { flex: 1; overflow: hidden; }
+    .history-item .history-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .history-item .history-file.left::before { content: "L: "; color: var(--accent); font-weight: 600; }
     .history-item .history-file.right::before { content: "R: "; color: var(--accent); font-weight: 600; }
+    .history-item .history-time { color: var(--text-muted); font-size: 11px; white-space: nowrap; align-self: center; }
+    .history-empty { padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
-    .history-item .history-time {
-      color: var(--text-muted);
-      font-size: 11px;
-      white-space: nowrap;
-      align-self: center;
-    }
-
-    .history-empty {
-      padding: 16px;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 13px;
-    }
-
-    .top-bar-separator {
-      width: 1px;
-      height: 20px;
-      background: var(--border);
-      margin: 0 4px;
-    }
-
-    .theme-toggle {
-      position: absolute;
-      right: 16px;
-      padding: 5px 12px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-muted);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 16px;
-      transition: all 0.15s;
-      line-height: 1;
-    }
-    .theme-toggle:hover { color: var(--text); border-color: var(--accent); }
-
-    /* Main Content */
+    /* ─── Main ─────────────────────────────────────────── */
     .main {
       display: flex;
       flex: 1;
       overflow: hidden;
     }
 
-    /* Panels */
+    /* ─── Panel ────────────────────────────────────────── */
     .panel {
       flex: 1;
       display: flex;
       flex-direction: column;
       min-width: 0;
-      border-right: 1px solid var(--border);
     }
-
-    .panel:last-of-type { border-right: none; }
+    .panel:first-child { border-right: 1px solid var(--border); }
 
     .panel-toolbar {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 6px 12px;
+      padding: 5px 10px;
       background: var(--bg-toolbar);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
@@ -213,171 +187,108 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-
     .panel-toolbar .file-name.has-file { color: var(--text); }
     .panel-toolbar .file-name .unsaved { color: var(--yellow); }
 
     .btn {
-      padding: 4px 12px;
+      padding: 3px 10px;
       border: 1px solid var(--border);
       background: transparent;
       color: var(--text-muted);
       border-radius: 4px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       transition: all 0.15s;
       white-space: nowrap;
     }
-
     .btn:hover { color: var(--text); border-color: var(--accent); }
-    .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-    .btn-open {
+    .btn-accent {
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
       font-weight: 600;
     }
+    .btn-accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-    .btn-open:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-save { display: none; }
+    .btn-save.visible { display: inline-block; }
 
-    /* Editor & Preview */
-    .panel-content {
+    /* ─── Editor with Line Numbers ──────────────────── */
+    .editor-wrapper {
       flex: 1;
+      display: flex;
       overflow: hidden;
       position: relative;
     }
 
-    .editor-area {
-      width: 100%;
-      height: 100%;
-      background: var(--bg-editor);
-      color: var(--text);
-      border: none;
-      resize: none;
-      padding: 16px;
-      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
-      font-size: 14px;
-      line-height: 1.6;
-      tab-size: 2;
-      outline: none;
-      overflow-y: auto;
-    }
-
-    .preview-area {
-      width: 100%;
-      height: 100%;
-      overflow-y: auto;
-      padding: 20px 24px;
-      background: var(--bg-panel);
-      display: none;
-      user-select: text;
-    }
-
-    .preview-area.visible { display: block; }
-    .editor-area.hidden { display: none; }
-
-    /* Shared Markdown Rendering Styles */
-    .md-render h1, .md-render h2, .md-render h3,
-    .md-render h4, .md-render h5, .md-render h6 {
-      color: var(--accent);
-      margin: 1em 0 0.5em;
-      line-height: 1.3;
-    }
-    .md-render h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
-    .md-render h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
-    .md-render h3 { font-size: 1.2em; }
-    .md-render p { margin: 0.6em 0; line-height: 1.7; }
-    .md-render ul, .md-render ol { padding-left: 1.5em; margin: 0.5em 0; }
-    .md-render li { margin: 0.25em 0; }
-    .md-render code {
-      background: var(--code-bg);
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.9em;
-    }
-    .md-render pre {
-      background: var(--bg-editor);
-      padding: 12px 16px;
-      border-radius: 6px;
-      overflow-x: auto;
-      margin: 0.8em 0;
-      border: 1px solid var(--border);
-    }
-    .md-render pre code { background: none; padding: 0; }
-    .md-render blockquote {
-      border-left: 3px solid var(--accent);
-      padding-left: 12px;
-      color: var(--text-muted);
-      margin: 0.6em 0;
-    }
-    .md-render table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
-    .md-render th, .md-render td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
-    .md-render th { background: var(--bg-toolbar); font-weight: 600; }
-    .md-render a { color: var(--accent); }
-    .md-render img { max-width: 100%; border-radius: 4px; }
-    .md-render hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
-
-    /* Diff Panel */
-    .diff-panel {
-      display: none;
-      flex: 1;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .diff-panel.visible { display: flex; }
-
-    .diff-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      background: var(--bg-toolbar);
-      border-bottom: 1px solid var(--border);
+    .line-gutter {
+      width: 48px;
       flex-shrink: 0;
-    }
-
-    .diff-toolbar .diff-title {
-      flex: 1;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .diff-stats {
-      font-size: 12px;
-      display: flex;
-      gap: 10px;
-    }
-
-    .diff-stats .additions { color: var(--green); }
-    .diff-stats .deletions { color: var(--red); }
-
-    .diff-content {
-      flex: 1;
+      background: var(--gutter-bg);
+      border-right: 1px solid var(--border);
       overflow: hidden;
+      user-select: none;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      padding-top: 8px;
     }
 
-    .diff-side-by-side {
-      display: flex;
-      height: 100%;
+    .line-num {
+      display: block;
+      text-align: right;
+      padding-right: 8px;
+      color: var(--text-muted);
+      opacity: 0.6;
+      height: 1.6em;
     }
 
-    .diff-side {
+    .line-num.diff-add {
+      background: var(--green-gutter);
+      color: var(--green);
+      opacity: 1;
+    }
+
+    .line-num.diff-del {
+      background: var(--red-gutter);
+      color: var(--red);
+      opacity: 1;
+    }
+
+    .editor-scroll {
       flex: 1;
-      overflow-y: auto;
+      position: relative;
+      overflow: hidden;
       min-width: 0;
-      user-select: text;
     }
 
-    .diff-side:first-child { border-right: 1px solid var(--border); }
+    .editor-highlight {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 8px 12px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre;
+      pointer-events: none;
+      z-index: 0;
+    }
 
-    /* Diff Source: editable textareas */
-    .diff-editor-area {
+    .hl-line {
+      display: block;
+      min-height: 1.6em;
+      margin: 0 -12px;
+      padding: 0 12px;
+    }
+
+    .hl-line.hl-add { background: var(--green-bg); }
+    .hl-line.hl-del { background: var(--red-bg); }
+
+    .editor-area {
+      position: relative;
       width: 100%;
-      min-height: 100%;
+      height: 100%;
       background: transparent;
       color: var(--text);
       border: none;
@@ -385,237 +296,135 @@
       padding: 8px 12px;
       font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
       font-size: 13px;
-      line-height: 1.55;
+      line-height: 1.6;
       tab-size: 2;
       outline: none;
-      white-space: pre-wrap;
-      word-break: break-all;
+      overflow-y: auto;
+      overflow-x: auto;
+      white-space: pre;
+      z-index: 1;
+      caret-color: var(--text);
     }
 
-    .diff-source-side {
-      display: flex;
-      flex-direction: column;
+    /* ─── Preview ──────────────────────────────────────── */
+    .preview-wrapper {
+      flex: 1;
+      display: none;
+      overflow: hidden;
     }
 
-    .diff-gutter {
-      display: flex;
-      flex-direction: column;
-    }
+    .preview-wrapper.visible { display: flex; }
+    .editor-wrapper.hidden { display: none; }
 
-    .diff-line {
-      display: flex;
-      min-height: 1.55em;
-      padding: 0 8px;
-    }
-
-    .diff-line-number {
+    .preview-gutter {
       width: 48px;
-      text-align: right;
-      padding-right: 12px;
-      color: var(--text-muted);
       flex-shrink: 0;
+      background: var(--gutter-bg);
+      border-right: 1px solid var(--border);
+      overflow: hidden;
       user-select: none;
-      opacity: 0.6;
     }
 
-    .diff-line-content {
-      flex: 1;
-      white-space: pre-wrap;
-      word-break: break-all;
-      padding: 0 4px;
-      user-select: text;
-    }
-
-    .diff-line.added { background: var(--green-bg); }
-    .diff-line.added .diff-line-content { color: var(--green); }
-    .diff-line.removed { background: var(--red-bg); }
-    .diff-line.removed .diff-line-content { color: var(--red); }
-    .diff-line.empty { background: var(--blue-bg); opacity: 0.3; }
-
-    /* Diff Preview */
-    .diff-preview-content {
-      overflow: hidden;
-    }
-
-    .diff-preview-side {
-      padding: 20px 24px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
-      font-size: 14px;
-      line-height: 1.6;
-      user-select: text;
-    }
-
-    /* Diff highlight markers in preview */
-    .diff-mark-added {
-      background: var(--green-bg-strong);
-      border-left: 3px solid var(--green);
-      padding-left: 6px;
-      display: block;
-      margin: 2px 0;
-    }
-    .diff-mark-removed {
-      background: var(--red-bg-strong);
-      border-left: 3px solid var(--red);
-      padding-left: 6px;
-      display: block;
-      margin: 2px 0;
-      text-decoration: line-through;
-      opacity: 0.7;
-    }
-
-    /* Diff editable wrapper */
-    .diff-edit-wrapper {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
-
-    .diff-edit-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 12px;
-      background: var(--bg-toolbar);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .diff-edit-header .file-name {
-      flex: 1;
-      font-size: 12px;
-      color: var(--text-muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .diff-edit-header .file-name.has-file { color: var(--text); }
-
-    .diff-readonly-overlay {
+    .preview-area {
       flex: 1;
       overflow-y: auto;
+      padding: 12px 20px;
+      background: var(--bg-panel);
+      user-select: text;
     }
 
-    /* Scrollbar */
+    /* ─── Markdown Styles ──────────────────────────────── */
+    .md-render h1, .md-render h2, .md-render h3,
+    .md-render h4, .md-render h5, .md-render h6 {
+      color: var(--accent); margin: 0.8em 0 0.4em; line-height: 1.3;
+    }
+    .md-render h1 { font-size: 1.6em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+    .md-render h2 { font-size: 1.3em; border-bottom: 1px solid var(--border); padding-bottom: 0.15em; }
+    .md-render h3 { font-size: 1.1em; }
+    .md-render p { margin: 0.5em 0; line-height: 1.6; }
+    .md-render ul, .md-render ol { padding-left: 1.5em; margin: 0.4em 0; }
+    .md-render li { margin: 0.2em 0; }
+    .md-render code {
+      background: var(--code-bg); padding: 2px 5px; border-radius: 3px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9em;
+    }
+    .md-render pre {
+      background: var(--bg-editor); padding: 10px 14px; border-radius: 6px;
+      overflow-x: auto; margin: 0.6em 0; border: 1px solid var(--border);
+    }
+    .md-render pre code { background: none; padding: 0; }
+    .md-render blockquote { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--text-muted); margin: 0.5em 0; }
+    .md-render table { border-collapse: collapse; width: 100%; margin: 0.6em 0; }
+    .md-render th, .md-render td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+    .md-render th { background: var(--bg-toolbar); font-weight: 600; }
+    .md-render a { color: var(--accent); }
+    .md-render img { max-width: 100%; border-radius: 4px; }
+    .md-render hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+
+    .diff-mark-added { background: var(--green-bg); border-left: 3px solid var(--green); padding-left: 6px; display: block; margin: 2px 0; }
+    .diff-mark-removed { background: var(--red-bg); border-left: 3px solid var(--red); padding-left: 6px; display: block; margin: 2px 0; text-decoration: line-through; opacity: 0.7; }
+
+    /* ─── Scrollbar ─────────────────────────────────────── */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
-    /* Side-by-Side panels hidden in diff mode */
-    .main.diff-mode .panel { display: none; }
-    .main.diff-mode .diff-panel { display: flex; }
-
-    /* Drag & Drop highlight */
-    .panel-content.drag-over {
-      outline: 2px dashed var(--accent);
-      outline-offset: -4px;
-    }
+    /* ─── Drop ──────────────────────────────────────────── */
+    .panel.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
   </style>
 </head>
 <body>
-  <!-- Top Bar -->
+
   <div class="top-bar">
     <div class="history-wrapper">
-      <button class="view-btn" id="historyBtn" title="Letzte Vergleiche">&#9776; Verlauf</button>
+      <button class="top-btn" id="historyBtn" title="Letzte Vergleiche">&#9776; Verlauf</button>
       <div class="history-dropdown" id="historyDropdown"></div>
     </div>
-    <span class="top-bar-separator"></span>
-    <button class="view-btn active" data-view="split">Split-Ansicht</button>
-    <button class="view-btn" data-view="diff">Diff-Ansicht</button>
-    <span class="top-bar-separator"></span>
-    <button class="view-btn mode-btn active" data-mode="edit">Bearbeiten</button>
-    <button class="view-btn mode-btn" data-mode="preview">Vorschau</button>
-    <button class="theme-toggle" id="themeToggle" title="Dark/Light Mode umschalten">&#9790;</button>
+    <span class="top-sep"></span>
+    <button class="top-btn" id="previewToggle">Vorschau</button>
+    <div class="diff-stats" id="diffStats"></div>
+    <button class="theme-toggle" id="themeToggle" title="Dark/Light Mode">&#9790;</button>
   </div>
 
-  <div class="main" id="mainContainer">
-    <!-- Left Panel -->
-    <div class="panel" id="panelLeft">
+  <div class="main">
+    <!-- Left -->
+    <div class="panel" id="panelLeft" data-side="left">
       <div class="panel-toolbar">
-        <button class="btn btn-open" onclick="api.openFile('left')">Datei öffnen</button>
-        <span class="file-name" id="fileNameLeft">Keine Datei geladen</span>
+        <button class="btn btn-accent" onclick="api.openFile('left')">Öffnen</button>
+        <span class="file-name" id="fileNameLeft">Keine Datei</span>
+        <button class="btn btn-save" id="saveLeft">Speichern</button>
       </div>
-      <div class="panel-content" id="contentLeft" data-side="left">
-        <textarea class="editor-area" id="editorLeft" placeholder="Markdown hier eingeben oder Datei öffnen..." spellcheck="false"></textarea>
+      <div class="editor-wrapper" id="editorWrapperLeft">
+        <div class="line-gutter" id="gutterLeft"></div>
+        <div class="editor-scroll">
+          <div class="editor-highlight" id="highlightLeft"></div>
+          <textarea class="editor-area" id="editorLeft" placeholder="Markdown eingeben oder Datei öffnen..." spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="preview-wrapper" id="previewWrapperLeft">
+        <div class="preview-gutter" id="previewGutterLeft"></div>
         <div class="preview-area md-render" id="previewLeft"></div>
       </div>
     </div>
 
-    <!-- Right Panel -->
-    <div class="panel" id="panelRight">
+    <!-- Right -->
+    <div class="panel" id="panelRight" data-side="right">
       <div class="panel-toolbar">
-        <button class="btn btn-open" onclick="api.openFile('right')">Datei öffnen</button>
-        <span class="file-name" id="fileNameRight">Keine Datei geladen</span>
+        <button class="btn btn-accent" onclick="api.openFile('right')">Öffnen</button>
+        <span class="file-name" id="fileNameRight">Keine Datei</span>
+        <button class="btn btn-save" id="saveRight">Speichern</button>
       </div>
-      <div class="panel-content" id="contentRight" data-side="right">
-        <textarea class="editor-area" id="editorRight" placeholder="Markdown hier eingeben oder Datei öffnen..." spellcheck="false"></textarea>
+      <div class="editor-wrapper" id="editorWrapperRight">
+        <div class="line-gutter" id="gutterRight"></div>
+        <div class="editor-scroll">
+          <div class="editor-highlight" id="highlightRight"></div>
+          <textarea class="editor-area" id="editorRight" placeholder="Markdown eingeben oder Datei öffnen..." spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="preview-wrapper" id="previewWrapperRight">
+        <div class="preview-gutter" id="previewGutterRight"></div>
         <div class="preview-area md-render" id="previewRight"></div>
-      </div>
-    </div>
-
-    <!-- Diff Panel -->
-    <div class="diff-panel" id="diffPanel">
-      <div class="diff-toolbar">
-        <span class="diff-title">Diff-Vergleich</span>
-        <div class="diff-stats" id="diffStats"></div>
-        <button class="btn diff-mode-btn active" data-diff-mode="source">Quelltext</button>
-        <button class="btn diff-mode-btn" data-diff-mode="preview">Vorschau</button>
-      </div>
-
-      <!-- Source Diff -->
-      <div class="diff-content" id="diffContentSource">
-        <div class="diff-side-by-side">
-          <div class="diff-side">
-            <div class="diff-edit-wrapper">
-              <div class="diff-edit-header">
-                <span class="file-name" id="diffFileNameLeft">Links</span>
-              </div>
-              <div class="diff-readonly-overlay" id="diffLeftOverlay">
-                <div id="diffLeft"></div>
-              </div>
-              <textarea class="diff-editor-area" id="diffEditorLeft" style="display:none;" spellcheck="false"></textarea>
-            </div>
-          </div>
-          <div class="diff-side">
-            <div class="diff-edit-wrapper">
-              <div class="diff-edit-header">
-                <span class="file-name" id="diffFileNameRight">Rechts</span>
-              </div>
-              <div class="diff-readonly-overlay" id="diffRightOverlay">
-                <div id="diffRight"></div>
-              </div>
-              <textarea class="diff-editor-area" id="diffEditorRight" style="display:none;" spellcheck="false"></textarea>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Preview Diff -->
-      <div class="diff-content diff-preview-content" id="diffContentPreview" style="display:none;">
-        <div class="diff-side-by-side">
-          <div class="diff-side">
-            <div class="diff-edit-wrapper">
-              <div class="diff-edit-header">
-                <span class="file-name" id="diffPreviewFileNameLeft">Links</span>
-              </div>
-              <div class="diff-readonly-overlay" id="diffPreviewLeftOverlay">
-                <div class="diff-preview-side md-render" id="diffPreviewLeft"></div>
-              </div>
-              <textarea class="diff-editor-area" id="diffPreviewEditorLeft" style="display:none;" spellcheck="false"></textarea>
-            </div>
-          </div>
-          <div class="diff-side">
-            <div class="diff-edit-wrapper">
-              <div class="diff-edit-header">
-                <span class="file-name" id="diffPreviewFileNameRight">Rechts</span>
-              </div>
-              <div class="diff-readonly-overlay" id="diffPreviewRightOverlay">
-                <div class="diff-preview-side md-render" id="diffPreviewRight"></div>
-              </div>
-              <textarea class="diff-editor-area" id="diffPreviewEditorRight" style="display:none;" spellcheck="false"></textarea>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>

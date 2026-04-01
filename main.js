@@ -1,6 +1,10 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs/promises');
+const fsSync = require('fs');
+
+const MD_FILTERS = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }];
+const SAVE_FILTERS = [{ name: 'Markdown', extensions: ['md'] }];
 
 let mainWindow;
 
@@ -20,6 +24,10 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
   buildMenu();
+}
+
+function sendFile(side, filePath, content) {
+  mainWindow.webContents.send('file-opened', { side, filePath, content });
 }
 
 function buildMenu() {
@@ -91,84 +99,78 @@ function buildMenu() {
 async function openFile(side) {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: `Markdown-Datei öffnen (${side === 'left' ? 'Links' : 'Rechts'})`,
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }],
+    filters: MD_FILTERS,
     properties: ['openFile']
   });
 
   if (!result.canceled && result.filePaths.length > 0) {
     const filePath = result.filePaths[0];
-    const content = fs.readFileSync(filePath, 'utf-8');
-    mainWindow.webContents.send('file-opened', { side, filePath, content });
+    const content = await fs.readFile(filePath, 'utf-8');
+    sendFile(side, filePath, content);
   }
 }
 
 async function openTwoFiles() {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Zwei Markdown-Dateien zum Vergleichen auswählen',
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }],
+    filters: MD_FILTERS,
     properties: ['openFile', 'multiSelections']
   });
 
   if (!result.canceled && result.filePaths.length > 0) {
     const paths = result.filePaths.slice(0, 2);
-    const leftContent = fs.readFileSync(paths[0], 'utf-8');
-    mainWindow.webContents.send('file-opened', { side: 'left', filePath: paths[0], content: leftContent });
-
-    if (paths.length >= 2) {
-      const rightContent = fs.readFileSync(paths[1], 'utf-8');
-      mainWindow.webContents.send('file-opened', { side: 'right', filePath: paths[1], content: rightContent });
-    }
+    const sides = ['left', 'right'];
+    await Promise.all(paths.map(async (p, i) => {
+      const content = await fs.readFile(p, 'utf-8');
+      sendFile(sides[i], p, content);
+    }));
   }
 }
 
-ipcMain.handle('open-file', async (_event, side) => {
-  await openFile(side);
-});
+ipcMain.handle('open-file', (_event, side) => openFile(side));
+
+async function saveToPath(filePath, content) {
+  await fs.writeFile(filePath, content, 'utf-8');
+  return { success: true, filePath };
+}
 
 ipcMain.handle('save-file', async (_event, { filePath, content }) => {
-  if (filePath) {
-    fs.writeFileSync(filePath, content, 'utf-8');
-    return { success: true, filePath };
-  }
+  if (filePath) return saveToPath(filePath, content);
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Markdown-Datei speichern',
-    filters: [{ name: 'Markdown', extensions: ['md'] }],
+    filters: SAVE_FILTERS,
   });
-  if (!result.canceled) {
-    fs.writeFileSync(result.filePath, content, 'utf-8');
-    return { success: true, filePath: result.filePath };
-  }
+  if (!result.canceled) return saveToPath(result.filePath, content);
   return { success: false };
 });
 
 ipcMain.handle('save-file-as', async (_event, { content }) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Markdown-Datei speichern unter…',
-    filters: [{ name: 'Markdown', extensions: ['md'] }],
+    filters: SAVE_FILTERS,
   });
-  if (!result.canceled) {
-    fs.writeFileSync(result.filePath, content, 'utf-8');
-    return { success: true, filePath: result.filePath };
-  }
+  if (!result.canceled) return saveToPath(result.filePath, content);
   return { success: false };
 });
 
-ipcMain.handle('read-file', (_event, filePath) => {
+ipcMain.handle('read-file', async (_event, filePath) => {
   try {
-    return { success: true, content: fs.readFileSync(filePath, 'utf-8') };
+    const content = await fs.readFile(filePath, 'utf-8');
+    return { success: true, content };
   } catch { return { success: false }; }
 });
 
 const historyFile = path.join(app.getPath('userData'), 'compare-history.json');
 
-ipcMain.handle('load-history', () => {
+ipcMain.handle('load-history', async () => {
   try {
-    return JSON.parse(fs.readFileSync(historyFile, 'utf-8'));
+    const data = await fs.readFile(historyFile, 'utf-8');
+    return JSON.parse(data);
   } catch { return []; }
 });
 
 ipcMain.handle('save-history', (_event, history) => {
-  fs.writeFileSync(historyFile, JSON.stringify(history), 'utf-8');
+  return fs.writeFile(historyFile, JSON.stringify(history), 'utf-8');
 });
 
 app.whenReady().then(createWindow);

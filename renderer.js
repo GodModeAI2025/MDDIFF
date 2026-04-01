@@ -258,6 +258,7 @@ els.previewToggle.addEventListener('click', () => {
 
 /* ─── Input Handling ──────────────────────────────────────────── */
 function updateContent(side, content) {
+  if (state[side].content === content) return;
   state[side].content = content;
   state[side].dirty = true;
   state.diffGen++;
@@ -270,11 +271,15 @@ function setupEditor(side) {
   const gutter = el('gutter', side);
   const highlight = el('highlight', side);
 
+  let previewTimer = null;
   editor.addEventListener('input', () => {
     updateContent(side, editor.value);
     updateGuttersDebounced();
     if (state.preview) {
-      el('preview', side).innerHTML = renderMarkdown(state[side].content);
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => {
+        el('preview', side).innerHTML = renderMarkdown(state[side].content);
+      }, 150);
     }
   });
 
@@ -308,8 +313,7 @@ function updateSaveBtn(side) {
   el('save', side).classList.toggle('visible', state[side].dirty);
 }
 
-els.saveLeft.addEventListener('click', () => saveFile('left'));
-els.saveRight.addEventListener('click', () => saveFile('right'));
+for (const side of SIDES) el('save', side).addEventListener('click', () => saveFile(side));
 
 async function saveFile(side) {
   const s = state[side];
@@ -326,11 +330,12 @@ window.api.onSaveFile((side) => saveFile(side));
 
 /* ─── Load Content ────────────────────────────────────────────── */
 function loadContent(side, content, filePath, dirty) {
-  state[side].content = content;
   state[side].filePath = filePath;
   state[side].dirty = dirty;
+  state[side].content = '';
   state.diffGen++;
   el('editor', side).value = content;
+  state[side].content = content;
   updateFileName(side);
   updateSaveBtn(side);
   updateGutters();
@@ -484,7 +489,7 @@ document.querySelectorAll('.toc-dropdown').forEach(dropdown => {
     const item = e.target.closest('.toc-item');
     if (!item) return;
     const lineIndex = parseInt(item.dataset.line);
-    const side = dropdown.id.replace('toc', '').toLowerCase();
+    const side = dropdown.dataset.side;
     dropdown.classList.remove('open');
 
     if (state.preview) {

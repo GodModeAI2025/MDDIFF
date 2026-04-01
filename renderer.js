@@ -13,8 +13,6 @@ const state = {
 const els = {
   editorLeft:       document.getElementById('editorLeft'),
   editorRight:      document.getElementById('editorRight'),
-  scrollLeft:       document.querySelector('#editorWrapperLeft .editor-scroll'),
-  scrollRight:      document.querySelector('#editorWrapperRight .editor-scroll'),
   highlightLeft:    document.getElementById('highlightLeft'),
   highlightRight:   document.getElementById('highlightRight'),
   gutterLeft:       document.getElementById('gutterLeft'),
@@ -272,22 +270,26 @@ function setupEditorScrollSync() {
     if (syncing) return;
     syncing = true;
 
-    const src = el('scroll', sourceSide);
+    const src = el('editor', sourceSide);
     const otherSide = sourceSide === 'left' ? 'right' : 'left';
-    const other = el('scroll', otherSide);
+    const other = el('editor', otherSide);
     const ratio = src.scrollTop / (src.scrollHeight - src.clientHeight || 1);
 
     other.scrollTop = ratio * (other.scrollHeight - other.clientHeight);
 
-    // Gutters direkt synchron (gleiche Zeilenhöhe wie Editor)
-    els.gutterLeft.scrollTop = els.scrollLeft.scrollTop;
-    els.gutterRight.scrollTop = els.scrollRight.scrollTop;
+    // Gutters
+    els.gutterLeft.scrollTop = els.editorLeft.scrollTop;
+    els.gutterRight.scrollTop = els.editorRight.scrollTop;
+
+    // Highlights per translateY
+    els.highlightLeft.style.transform = `translateY(${-els.editorLeft.scrollTop}px)`;
+    els.highlightRight.style.transform = `translateY(${-els.editorRight.scrollTop}px)`;
 
     requestAnimationFrame(() => { syncing = false; });
   }
 
-  els.scrollLeft.addEventListener('scroll', () => onScroll('left'));
-  els.scrollRight.addEventListener('scroll', () => onScroll('right'));
+  els.editorLeft.addEventListener('scroll', () => onScroll('left'));
+  els.editorRight.addEventListener('scroll', () => onScroll('right'));
 }
 
 function setupPreviewScrollSync() {
@@ -319,7 +321,7 @@ function getScrollRatio(element) {
 
 els.previewToggle.addEventListener('click', () => {
   for (const side of SIDES) {
-    scrollRatios[side] = getScrollRatio(state.preview ? el('preview', side) : el('scroll', side));
+    scrollRatios[side] = getScrollRatio(state.preview ? el('preview', side) : el('editor', side));
   }
 
   state.preview = !state.preview;
@@ -341,7 +343,7 @@ els.previewToggle.addEventListener('click', () => {
       ew.classList.remove('hidden');
       pw.classList.remove('visible');
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        const scr = el('scroll', side);
+        const scr = el('editor', side);
         scr.scrollTop = ratio * (scr.scrollHeight - scr.clientHeight);
         el('editor', side).focus();
       }));
@@ -545,22 +547,33 @@ function buildToc(side) {
 }
 
 function scrollToLine(side, lineIndex) {
-  const scr = el('scroll', side);
   const editor = el('editor', side);
   const content = state[side].content;
-  const totalLines = content.split('\n').length;
 
+  // Cursor-Position berechnen
   let pos = 0;
   for (let i = 0; i < lineIndex; i++) {
     const nl = content.indexOf('\n', pos);
     pos = nl === -1 ? content.length : nl + 1;
   }
 
-  const ratio = lineIndex / (totalLines - 1 || 1);
-  scr.scrollTop = ratio * (scr.scrollHeight - scr.clientHeight);
-
+  // Cursor setzen – das bewegt die interne Scroll-Position der Textarea
   editor.focus();
   editor.setSelectionRange(pos, pos);
+
+  // Temporäres Element einfügen um die exakte Pixel-Position der Zeile zu messen
+  // Fallback: Zeilenhöhe * Zeilenindex
+  const style = getComputedStyle(editor);
+  const lineHeight = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.6);
+  const paddingTop = parseFloat(style.paddingTop) || 0;
+  const targetY = paddingTop + lineIndex * lineHeight;
+
+  // Scroll so dass Zielzeile im oberen Drittel sichtbar ist
+  editor.scrollTop = Math.max(0, targetY - editor.clientHeight / 3);
+
+  // Gutter + Highlight synchronisieren
+  el('gutter', side).scrollTop = editor.scrollTop;
+  el('highlight', side).style.transform = `translateY(${-editor.scrollTop}px)`;
 }
 
 /* ─── Delta Navigation ────────────────────────────────────────── */
@@ -575,25 +588,20 @@ function getDeltaLines(side) {
 }
 
 function getCurrentLine(side) {
-  const scr = el('scroll', side);
-  const totalLines = (state[side].content || '').split('\n').length;
-  const ratio = scr.scrollTop / (scr.scrollHeight - scr.clientHeight || 1);
-  return Math.round(ratio * (totalLines - 1));
+  const editor = el('editor', side);
+  const style = getComputedStyle(editor);
+  const lineHeight = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.6);
+  const paddingTop = parseFloat(style.paddingTop) || 0;
+  return Math.round((editor.scrollTop - paddingTop + editor.clientHeight / 3) / lineHeight);
 }
 
 function scrollBothSidesToLine(side, lineIndex) {
   scrollToLine(side, lineIndex);
 
+  // Andere Seite zum gleichen Zeilenindex scrollen
   const otherSide = side === 'left' ? 'right' : 'left';
   requestAnimationFrame(() => {
-    const scr = el('scroll', side);
-    const ratio = scr.scrollTop / (scr.scrollHeight - scr.clientHeight || 1);
-    el('scroll', otherSide).scrollTop = ratio * (el('scroll', otherSide).scrollHeight - el('scroll', otherSide).clientHeight);
-
-    if (state.preview) {
-      el('preview', side).scrollTop = ratio * (el('preview', side).scrollHeight - el('preview', side).clientHeight);
-      el('preview', otherSide).scrollTop = ratio * (el('preview', otherSide).scrollHeight - el('preview', otherSide).clientHeight);
-    }
+    scrollToLine(otherSide, lineIndex);
   });
 }
 

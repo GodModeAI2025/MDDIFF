@@ -323,9 +323,8 @@
     .editor-scroll {
       flex: 1;
       position: relative;
-      overflow: auto;
+      overflow: hidden;
       min-width: 0;
-      background: var(--bg-editor);
     }
 
     .editor-highlight {
@@ -353,7 +352,7 @@
     .editor-area {
       position: relative;
       width: 100%;
-      min-height: 100%;
+      height: 100%;
       background: transparent;
       color: var(--text);
       border: none;
@@ -364,7 +363,8 @@
       line-height: 1.6;
       tab-size: 2;
       outline: none;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: auto;
       white-space: pre;
       z-index: 1;
       caret-color: var(--text);

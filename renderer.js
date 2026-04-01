@@ -173,19 +173,56 @@ function renderPreviewWithDiff(side) {
     if (side === 'right' && e.type === 'add') statuses[e.lb - 1] = 'add';
   }
 
-  // Zeilen mit Diff-Markern umschließen vor dem Rendern
-  const markedMd = lines.map((line, i) => {
+  // Tabellenzeilen nicht mit Markern umschließen (zerstört Table-Parsing),
+  // stattdessen tracken und nachträglich auf <tr> anwenden
+  const tableRowDiffs = [];
+  let tableIdx = -1;
+  let inTable = false;
+  let rowIdx = 0;
+
+  const markedLines = lines.map((line, i) => {
+    const trimmed = line.trim();
+    const isTableLine = /^\|.+\|$/.test(trimmed);
+
+    if (isTableLine) {
+      if (!inTable) { inTable = true; tableIdx++; rowIdx = 0; }
+      const cells = trimmed.slice(1, -1).split('|').map(c => c.trim());
+      const isSep = cells.every(c => /^[-:]+$/.test(c));
+      if (!isSep) {
+        if (statuses[i]) tableRowDiffs.push({ table: tableIdx, row: rowIdx, status: statuses[i] });
+        rowIdx++;
+      }
+      return line;
+    }
+
+    if (inTable) inTable = false;
     if (statuses[i] === 'add') return '\x00DIFFADD\x00' + line + '\x00/DIFFADD\x00';
     if (statuses[i] === 'del') return '\x00DIFFDEL\x00' + line + '\x00/DIFFDEL\x00';
     return line;
-  }).join('\n');
+  });
 
-  let html = renderMarkdown(markedMd);
+  let html = renderMarkdown(markedLines.join('\n'));
   html = html
     .replace(/\x00DIFFADD\x00/g, '<span class="diff-mark-added">')
     .replace(/\x00\/DIFFADD\x00/g, '</span>')
     .replace(/\x00DIFFDEL\x00/g, '<span class="diff-mark-removed">')
     .replace(/\x00\/DIFFDEL\x00/g, '</span>');
+
+  // Diff-Klassen auf Tabellenzeilen anwenden
+  if (tableRowDiffs.length) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const tables = tmp.querySelectorAll('table');
+    for (const d of tableRowDiffs) {
+      if (tables[d.table]) {
+        const rows = tables[d.table].querySelectorAll('tr');
+        if (rows[d.row]) {
+          rows[d.row].classList.add(d.status === 'add' ? 'diff-tr-added' : 'diff-tr-removed');
+        }
+      }
+    }
+    html = tmp.innerHTML;
+  }
 
   return html;
 }

@@ -263,27 +263,53 @@ function updateGuttersDebounced() {
 }
 
 /* ─── Sync Scroll ────────────────────────────────────────────── */
-let scrolling = false;
+// Eigener Lock pro Scroll-Gruppe um Konkurrenz zu vermeiden
+function setupEditorScrollSync() {
+  let syncing = false;
 
-function syncScroll(src, targets) {
-  let lastTop = src.scrollTop;
-  src.addEventListener('scroll', () => {
-    if (scrolling) return;
-    if (src.scrollTop === lastTop) return;
-    lastTop = src.scrollTop;
-    scrolling = true;
-    const ratio = src.scrollTop / (src.scrollHeight - src.clientHeight || 1);
-    for (const t of targets) {
-      t.scrollTop = ratio * (t.scrollHeight - t.clientHeight);
-    }
-    requestAnimationFrame(() => { scrolling = false; });
-  });
+  function onScroll(source) {
+    if (syncing) return;
+    syncing = true;
+
+    const other = source === els.editorLeft ? els.editorRight : els.editorLeft;
+    const ratio = source.scrollTop / (source.scrollHeight - source.clientHeight || 1);
+
+    // Anderen Editor per Ratio synchronisieren
+    other.scrollTop = ratio * (other.scrollHeight - other.clientHeight);
+
+    // Beide Gutters direkt per scrollTop (gleiche Zeilenhöhe)
+    els.gutterLeft.scrollTop = els.editorLeft.scrollTop;
+    els.gutterRight.scrollTop = els.editorRight.scrollTop;
+
+    // Highlight-Overlays
+    els.highlightLeft.style.top = -els.editorLeft.scrollTop + 'px';
+    els.highlightRight.style.top = -els.editorRight.scrollTop + 'px';
+
+    requestAnimationFrame(() => { syncing = false; });
+  }
+
+  els.editorLeft.addEventListener('scroll', () => onScroll(els.editorLeft));
+  els.editorRight.addEventListener('scroll', () => onScroll(els.editorRight));
 }
 
-syncScroll(els.editorLeft, [els.editorRight, els.gutterLeft, els.gutterRight]);
-syncScroll(els.editorRight, [els.editorLeft, els.gutterLeft, els.gutterRight]);
-syncScroll(els.previewLeft, [els.previewRight]);
-syncScroll(els.previewRight, [els.previewLeft]);
+function setupPreviewScrollSync() {
+  let syncing = false;
+
+  function onScroll(source) {
+    if (syncing) return;
+    syncing = true;
+    const other = source === els.previewLeft ? els.previewRight : els.previewLeft;
+    const ratio = source.scrollTop / (source.scrollHeight - source.clientHeight || 1);
+    other.scrollTop = ratio * (other.scrollHeight - other.clientHeight);
+    requestAnimationFrame(() => { syncing = false; });
+  }
+
+  els.previewLeft.addEventListener('scroll', () => onScroll(els.previewLeft));
+  els.previewRight.addEventListener('scroll', () => onScroll(els.previewRight));
+}
+
+setupEditorScrollSync();
+setupPreviewScrollSync();
 
 /* ─── Preview Toggle ─────────────────────────────────────────── */
 const scrollRatios = { left: 0, right: 0 };
@@ -337,8 +363,6 @@ function updateContent(side, content) {
 
 function setupEditor(side) {
   const editor = el('editor', side);
-  const gutter = el('gutter', side);
-  const highlight = el('highlight', side);
 
   let previewTimer = null;
   editor.addEventListener('input', () => {
@@ -350,11 +374,6 @@ function setupEditor(side) {
         el('preview', side).innerHTML = renderPreviewWithDiff(side);
       }, 150);
     }
-  });
-
-  editor.addEventListener('scroll', () => {
-    gutter.scrollTop = editor.scrollTop;
-    highlight.style.top = -editor.scrollTop + 'px';
   });
 
   editor.addEventListener('keydown', (e) => {

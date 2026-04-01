@@ -322,25 +322,34 @@ function updateGuttersDebounced() {
 function setupEditorScrollSync() {
   let syncing = false;
 
-  function onScroll(sourceSide) {
+  // Rechts scrollt → links zeilen-synchron mitscrollen
+  els.editorRight.addEventListener('scroll', () => {
     if (syncing) return;
     syncing = true;
 
-    const src = el('editor', sourceSide);
-    const otherSide = sourceSide === 'left' ? 'right' : 'left';
-    const other = el('editor', otherSide);
-    const ratio = src.scrollTop / (src.scrollHeight - src.clientHeight || 1);
-
-    other.scrollTop = ratio * (other.scrollHeight - other.clientHeight);
-
-    els.gutterLeft.scrollTop = els.editorLeft.scrollTop;
     els.gutterRight.scrollTop = els.editorRight.scrollTop;
 
-    requestAnimationFrame(() => { syncing = false; });
-  }
+    // Links: basierend auf sichtbarer Zeile rechts
+    const rightEditor = els.editorRight;
+    const style = getComputedStyle(rightEditor);
+    const lineHeight = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.6);
+    const paddingTop = parseFloat(style.paddingTop) || 0;
+    const topRightLine = Math.floor((rightEditor.scrollTop - paddingTop) / lineHeight);
+    const leftLine = findMatchingLeftLine(Math.max(0, topRightLine));
 
-  els.editorLeft.addEventListener('scroll', () => onScroll('left'));
-  els.editorRight.addEventListener('scroll', () => onScroll('right'));
+    const leftStyle = getComputedStyle(els.editorLeft);
+    const leftLineHeight = parseFloat(leftStyle.lineHeight) || (parseFloat(leftStyle.fontSize) * 1.6);
+    const leftPadding = parseFloat(leftStyle.paddingTop) || 0;
+    els.editorLeft.scrollTop = leftPadding + leftLine * leftLineHeight;
+    els.gutterLeft.scrollTop = els.editorLeft.scrollTop;
+
+    requestAnimationFrame(() => { syncing = false; });
+  });
+
+  // Links scrollt → Gutters synchron, rechts nicht bewegen
+  els.editorLeft.addEventListener('scroll', () => {
+    els.gutterLeft.scrollTop = els.editorLeft.scrollTop;
+  });
 }
 
 function setupPreviewScrollSync() {
@@ -412,13 +421,59 @@ function updateContent(side, content) {
   updateSaveBtn(side);
 }
 
+function getCursorLine(editor) {
+  const text = editor.value.substring(0, editor.selectionStart);
+  return text.split('\n').length - 1;
+}
+
+function findMatchingLeftLine(rightLine) {
+  const diff = getCachedDiff();
+  // Finde die letzte eq-Zeile vor oder bei rightLine
+  let bestLeft = -1;
+  let bestRight = -1;
+  for (const e of diff) {
+    if (e.type === 'eq') {
+      if (e.lb - 1 <= rightLine) {
+        bestLeft = e.la - 1;
+        bestRight = e.lb - 1;
+      }
+    }
+  }
+  if (bestLeft === -1) return rightLine;
+  // Offset von der letzten übereinstimmenden Zeile
+  return bestLeft + (rightLine - bestRight);
+}
+
+function syncLeftToRightCursor() {
+  const rightEditor = els.editorRight;
+  const leftEditor = els.editorLeft;
+  const rightLine = getCursorLine(rightEditor);
+  const leftLine = findMatchingLeftLine(rightLine);
+
+  const style = getComputedStyle(leftEditor);
+  const lineHeight = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.6);
+  const paddingTop = parseFloat(style.paddingTop) || 0;
+  const targetY = paddingTop + leftLine * lineHeight;
+
+  leftEditor.scrollTop = Math.max(0, targetY - leftEditor.clientHeight / 3);
+  els.gutterLeft.scrollTop = leftEditor.scrollTop;
+}
+
 function setupEditor(side) {
   const editor = el('editor', side);
 
   let previewTimer = null;
   editor.addEventListener('input', () => {
+    // Scroll-Position merken
+    const scrollBefore = editor.scrollTop;
     updateContent(side, editor.value);
     updateGuttersDebounced();
+    // Scroll-Position wiederherstellen
+    requestAnimationFrame(() => {
+      editor.scrollTop = scrollBefore;
+      el('gutter', side).scrollTop = scrollBefore;
+      if (side === 'right') syncLeftToRightCursor();
+    });
     if (state.preview) {
       clearTimeout(previewTimer);
       previewTimer = setTimeout(() => {
@@ -426,6 +481,16 @@ function setupEditor(side) {
       }, 150);
     }
   });
+
+  if (side === 'right') {
+    // Cursor-Bewegung rechts → links mitscrollen
+    editor.addEventListener('click', syncLeftToRightCursor);
+    editor.addEventListener('keyup', (e) => {
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(e.key)) {
+        syncLeftToRightCursor();
+      }
+    });
+  }
 
   editor.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') { e.preventDefault(); insertTab(editor); }

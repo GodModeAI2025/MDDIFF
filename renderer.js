@@ -53,9 +53,12 @@ function buildLineSpans(count, statuses, prefix) {
   const parts = new Array(count);
   for (let i = 0; i < count; i++) {
     const cls = statuses[i];
-    parts[i] = prefix === 'line-num'
-      ? `<span class="${prefix} ${cls ? 'diff-' + cls : ''}">${i + 1}</span>`
-      : `<span class="${prefix} ${cls ? 'hl-' + cls : ''}">\n</span>`;
+    if (prefix === 'line-num') {
+      const marker = cls === 'add' ? '+' : cls === 'del' ? '-' : '';
+      parts[i] = `<span class="${prefix} ${cls ? 'diff-' + cls : ''}">${marker}${i + 1}</span>`;
+    } else {
+      parts[i] = `<span class="${prefix} ${cls ? 'hl-' + cls : ''}">\n</span>`;
+    }
   }
   return parts.join('');
 }

@@ -52,12 +52,21 @@ function insertTab(ta) {
 function buildLineSpans(count, statuses, prefix) {
   const parts = new Array(count);
   for (let i = 0; i < count; i++) {
-    const cls = statuses[i];
+    const s = statuses[i];
     if (prefix === 'line-num') {
-      const marker = cls === 'add' ? '+' : cls === 'del' ? '-' : '';
-      parts[i] = `<span class="${prefix} ${cls ? 'diff-' + cls : ''}">${marker}${i + 1}</span>`;
+      let marker = '', cls = '';
+      if (s === 'add') { marker = '+'; cls = 'diff-add'; }
+      else if (s === 'del') { marker = '-'; cls = 'diff-del'; }
+      else if (s === 'mod-del') { marker = '~'; cls = 'diff-mod'; }
+      else if (s === 'mod-add') { marker = '~'; cls = 'diff-mod'; }
+      parts[i] = `<span class="${prefix} ${cls}">${marker}${i + 1}</span>`;
     } else {
-      parts[i] = `<span class="${prefix} ${cls ? 'hl-' + cls : ''}">\n</span>`;
+      let cls = '';
+      if (s === 'add') cls = 'hl-add';
+      else if (s === 'del') cls = 'hl-del';
+      else if (s === 'mod-del') cls = 'hl-mod-del';
+      else if (s === 'mod-add') cls = 'hl-mod-add';
+      parts[i] = `<span class="${prefix} ${cls}">\n</span>`;
     }
   }
   return parts.join('');
@@ -168,9 +177,25 @@ function renderPreviewWithDiff(side) {
   const lines = (state[side].content || '').split('\n');
   const statuses = new Array(lines.length).fill('');
 
-  for (const e of diff) {
-    if (side === 'left' && e.type === 'del') statuses[e.la - 1] = 'add';
-    if (side === 'right' && e.type === 'add') statuses[e.lb - 1] = 'add';
+  // Gleiche Gruppierung wie in updateGutters
+  let i = 0;
+  while (i < diff.length) {
+    if (diff[i].type === 'eq') { i++; continue; }
+    const delBlock = [];
+    while (i < diff.length && diff[i].type === 'del') { delBlock.push(diff[i]); i++; }
+    const addBlock = [];
+    while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
+    const paired = Math.min(delBlock.length, addBlock.length);
+    for (let p = 0; p < paired; p++) {
+      if (side === 'left') statuses[delBlock[p].la - 1] = 'mod';
+      if (side === 'right') statuses[addBlock[p].lb - 1] = 'mod';
+    }
+    for (let p = paired; p < delBlock.length; p++) {
+      if (side === 'left') statuses[delBlock[p].la - 1] = 'del';
+    }
+    for (let p = paired; p < addBlock.length; p++) {
+      if (side === 'right') statuses[addBlock[p].lb - 1] = 'add';
+    }
   }
 
   // Tabellenzeilen nicht mit Markern umschließen (zerstört Table-Parsing),
@@ -196,14 +221,20 @@ function renderPreviewWithDiff(side) {
     }
 
     if (inTable) inTable = false;
-    if (statuses[i]) return '\x00DIFFADD\x00' + line + '\x00/DIFFADD\x00';
+    if (statuses[i] === 'add') return '\x00DA\x00' + line + '\x00/DA\x00';
+    if (statuses[i] === 'del') return '\x00DD\x00' + line + '\x00/DD\x00';
+    if (statuses[i] === 'mod') return '\x00DM\x00' + line + '\x00/DM\x00';
     return line;
   });
 
   let html = renderMarkdown(markedLines.join('\n'));
   html = html
-    .replace(/\x00DIFFADD\x00/g, '<span class="diff-mark-added">')
-    .replace(/\x00\/DIFFADD\x00/g, '</span>');
+    .replace(/\x00DA\x00/g, '<span class="diff-mark-added">')
+    .replace(/\x00\/DA\x00/g, '</span>')
+    .replace(/\x00DD\x00/g, '<span class="diff-mark-removed">')
+    .replace(/\x00\/DD\x00/g, '</span>')
+    .replace(/\x00DM\x00/g, '<span class="diff-mark-modified">')
+    .replace(/\x00\/DM\x00/g, '</span>');
 
   // Diff-Klassen auf Tabellenzeilen anwenden
   if (tableRowDiffs.length) {
@@ -234,10 +265,39 @@ function updateGutters() {
     data[side] = { lines, statuses: new Array(lines.length).fill('') };
   }
 
-  let diffs = 0;
-  for (const e of diff) {
-    if (e.type === 'del') { data.left.statuses[e.la - 1] = 'add'; diffs++; }
-    if (e.type === 'add') { data.right.statuses[e.lb - 1] = 'add'; diffs++; }
+  // Gruppiere konsekutive del/add als Modifikationen
+  let adds = 0, dels = 0, mods = 0;
+  let i = 0;
+  while (i < diff.length) {
+    if (diff[i].type === 'eq') { i++; continue; }
+
+    // Sammle konsekutive del-Einträge
+    const delBlock = [];
+    while (i < diff.length && diff[i].type === 'del') { delBlock.push(diff[i]); i++; }
+
+    // Sammle direkt folgende add-Einträge
+    const addBlock = [];
+    while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
+
+    // del+add Paare = Modifikation (gelb ~)
+    const paired = Math.min(delBlock.length, addBlock.length);
+    for (let p = 0; p < paired; p++) {
+      data.left.statuses[delBlock[p].la - 1] = 'mod-del';
+      data.right.statuses[addBlock[p].lb - 1] = 'mod-add';
+      mods++;
+    }
+
+    // Übrige del = reine Löschung (rot -)
+    for (let p = paired; p < delBlock.length; p++) {
+      data.left.statuses[delBlock[p].la - 1] = 'del';
+      dels++;
+    }
+
+    // Übrige add = reine Hinzufügung (grün +)
+    for (let p = paired; p < addBlock.length; p++) {
+      data.right.statuses[addBlock[p].lb - 1] = 'add';
+      adds++;
+    }
   }
 
   for (const side of SIDES) {
@@ -246,8 +306,9 @@ function updateGutters() {
     el('highlight', side).innerHTML = buildLineSpans(lines.length, statuses, 'hl-line');
   }
 
-  els.diffStats.innerHTML = diffs
-    ? `<span class="add">${diffs} Unterschiede</span>`
+  const total = adds + dels + mods;
+  els.diffStats.innerHTML = total
+    ? `<span class="add">+${adds}</span> <span class="del">-${dels}</span> <span style="color:var(--yellow)">~${mods}</span>`
     : '';
 
   updateDeltaButtons();
@@ -575,11 +636,33 @@ function scrollToLine(side, lineIndex) {
 
 /* ─── Delta Navigation ────────────────────────────────────────── */
 function getDeltaLines(side) {
+  // Lese die berechneten Statuses aus dem Gutter (statt neu berechnen)
+  const content = state[side].content || '';
+  const lineCount = content.split('\n').length;
   const diff = getCachedDiff();
+
+  // Schnell: sammle alle Zeilen mit Diff-Status
   const lines = [];
-  for (const e of diff) {
-    if (side === 'left' && e.type === 'del') lines.push(e.la - 1);
-    if (side === 'right' && e.type === 'add') lines.push(e.lb - 1);
+  const statuses = new Array(lineCount).fill('');
+
+  let i = 0;
+  while (i < diff.length) {
+    if (diff[i].type === 'eq') { i++; continue; }
+    const delBlock = [];
+    while (i < diff.length && diff[i].type === 'del') { delBlock.push(diff[i]); i++; }
+    const addBlock = [];
+    while (i < diff.length && diff[i].type === 'add') { addBlock.push(diff[i]); i++; }
+    const paired = Math.min(delBlock.length, addBlock.length);
+    for (let p = 0; p < paired; p++) {
+      if (side === 'left') lines.push(delBlock[p].la - 1);
+      if (side === 'right') lines.push(addBlock[p].lb - 1);
+    }
+    for (let p = paired; p < delBlock.length; p++) {
+      if (side === 'left') lines.push(delBlock[p].la - 1);
+    }
+    for (let p = paired; p < addBlock.length; p++) {
+      if (side === 'right') lines.push(addBlock[p].lb - 1);
+    }
   }
   return lines.sort((a, b) => a - b);
 }

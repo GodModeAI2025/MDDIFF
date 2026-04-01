@@ -312,12 +312,44 @@
       background: var(--green-gutter);
       color: var(--green);
       opacity: 1;
+      border-right: 3px solid var(--green);
+      padding-right: 5px;
     }
 
     .line-num.diff-del {
       background: var(--red-gutter);
       color: var(--red);
       opacity: 1;
+      border-right: 3px solid var(--red);
+      padding-right: 5px;
+    }
+
+    .line-num.diff-mod {
+      background: var(--green-gutter);
+      color: var(--yellow);
+      opacity: 1;
+      border-right: 3px solid var(--yellow);
+      padding-right: 5px;
+    }
+
+    .panel-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .panel-label.original {
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+    .panel-label.modified {
+      background: var(--green-bg);
+      color: var(--green);
+      border: 1px solid var(--green);
     }
 
     .editor-scroll {
@@ -348,6 +380,8 @@
 
     .hl-line.hl-add { background: var(--green-bg); }
     .hl-line.hl-del { background: var(--red-bg); }
+    .hl-line.hl-mod-del { background: var(--red-bg); }
+    .hl-line.hl-mod-add { background: var(--green-bg); }
 
     .editor-area {
       position: relative;
@@ -427,6 +461,7 @@
 
     .diff-mark-added { background: var(--green-bg); border-left: 3px solid var(--green); padding-left: 6px; display: block; margin: 2px 0; }
     .diff-mark-removed { background: var(--red-bg); border-left: 3px solid var(--red); padding-left: 6px; display: block; margin: 2px 0; text-decoration: line-through; opacity: 0.7; }
+    .diff-mark-modified { background: rgba(249, 226, 175, 0.10); border-left: 3px solid var(--yellow); padding-left: 6px; display: block; margin: 2px 0; }
 
     .diff-tr-added td, .diff-tr-added th { background: var(--green-bg); color: var(--green); }
     .diff-tr-added { border-left: 3px solid var(--green); }
@@ -458,9 +493,10 @@
   </div>
 
   <div class="main">
-    <!-- Left -->
+    <!-- Left = Original -->
     <div class="panel" id="panelLeft" data-side="left">
       <div class="panel-toolbar">
+        <span class="panel-label original">Original</span>
         <button class="btn btn-accent" id="openLeft">Öffnen</button>
         <span class="file-name" id="fileNameLeft">Keine Datei</span>
         <div class="toc-wrapper">
@@ -484,9 +520,10 @@
       </div>
     </div>
 
-    <!-- Right -->
+    <!-- Right = Geändert -->
     <div class="panel" id="panelRight" data-side="right">
       <div class="panel-toolbar">
+        <span class="panel-label modified">Geändert</span>
         <button class="btn btn-accent" id="openRight">Öffnen</button>
         <span class="file-name" id="fileNameRight">Keine Datei</span>
         <div class="toc-wrapper">

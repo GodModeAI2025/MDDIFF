@@ -47,6 +47,7 @@ Download the latest `.dmg` from [Releases](https://github.com/GodModeAI2025/MDDI
 git clone https://github.com/GodModeAI2025/MDDIFF.git
 cd MDDIFF
 npm install
+npm run check
 npm start
 ```
 

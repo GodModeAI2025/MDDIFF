@@ -1,10 +1,10 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
-const fsSync = require('fs');
 
 const MD_FILTERS = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }];
 const SAVE_FILTERS = [{ name: 'Markdown', extensions: ['md'] }];
+const VALID_SIDES = new Set(['left', 'right']);
 
 let mainWindow;
 
@@ -27,7 +27,21 @@ function createWindow() {
 }
 
 function sendFile(side, filePath, content) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('file-opened', { side, filePath, content });
+}
+
+function isValidSide(side) {
+  return VALID_SIDES.has(side);
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function showOperationError(title, error) {
+  console.error(`[${title}]`, error);
+  dialog.showErrorBox(title, errorMessage(error));
 }
 
 function buildMenu() {
@@ -97,33 +111,53 @@ function buildMenu() {
 }
 
 async function openFile(side) {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: `Markdown-Datei öffnen (${side === 'left' ? 'Links' : 'Rechts'})`,
-    filters: MD_FILTERS,
-    properties: ['openFile']
-  });
+  if (!isValidSide(side)) {
+    return { success: false, error: 'Ungültige Seite.' };
+  }
 
-  if (!result.canceled && result.filePaths.length > 0) {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: `Markdown-Datei öffnen (${side === 'left' ? 'Links' : 'Rechts'})`,
+      filters: MD_FILTERS,
+      properties: ['openFile']
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, canceled: true };
+    }
+
     const filePath = result.filePaths[0];
     const content = await fs.readFile(filePath, 'utf-8');
     sendFile(side, filePath, content);
+    return { success: true, filePath };
+  } catch (error) {
+    showOperationError('Datei konnte nicht geöffnet werden', error);
+    return { success: false, error: errorMessage(error) };
   }
 }
 
 async function openTwoFiles() {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Zwei Markdown-Dateien zum Vergleichen auswählen',
-    filters: MD_FILTERS,
-    properties: ['openFile', 'multiSelections']
-  });
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Zwei Markdown-Dateien zum Vergleichen auswählen',
+      filters: MD_FILTERS,
+      properties: ['openFile', 'multiSelections']
+    });
 
-  if (!result.canceled && result.filePaths.length > 0) {
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, canceled: true };
+    }
+
     const paths = result.filePaths.slice(0, 2);
     const sides = ['left', 'right'];
     await Promise.all(paths.map(async (p, i) => {
       const content = await fs.readFile(p, 'utf-8');
       sendFile(sides[i], p, content);
     }));
+    return { success: true, count: paths.length };
+  } catch (error) {
+    showOperationError('Dateien konnten nicht geöffnet werden', error);
+    return { success: false, error: errorMessage(error) };
   }
 }
 
@@ -131,8 +165,13 @@ ipcMain.handle('open-file', (_event, side) => openFile(side));
 ipcMain.handle('open-two-files', () => openTwoFiles());
 
 async function saveToPath(filePath, content) {
-  await fs.writeFile(filePath, content, 'utf-8');
-  return { success: true, filePath };
+  try {
+    await fs.writeFile(filePath, content, 'utf-8');
+    return { success: true, filePath };
+  } catch (error) {
+    showOperationError('Datei konnte nicht gespeichert werden', error);
+    return { success: false, error: errorMessage(error) };
+  }
 }
 
 async function saveWithDialog(content) {
@@ -140,15 +179,16 @@ async function saveWithDialog(content) {
     title: 'Markdown-Datei speichern',
     filters: SAVE_FILTERS,
   });
-  if (!result.canceled) return saveToPath(result.filePath, content);
+  if (!result.canceled && result.filePath) return saveToPath(result.filePath, content);
   return { success: false };
 }
 
-ipcMain.handle('save-file', async (_event, { filePath, content }) => {
+ipcMain.handle('save-file', async (_event, payload = {}) => {
+  const { filePath, content = '' } = payload;
   return filePath ? saveToPath(filePath, content) : saveWithDialog(content);
 });
 
-ipcMain.handle('save-file-as', async (_event, { content }) => saveWithDialog(content));
+ipcMain.handle('save-file-as', async (_event, payload = {}) => saveWithDialog(payload.content || ''));
 
 ipcMain.handle('read-file', async (_event, filePath) => {
   try {
@@ -162,15 +202,26 @@ const historyFile = path.join(app.getPath('userData'), 'compare-history.json');
 ipcMain.handle('load-history', async () => {
   try {
     const data = await fs.readFile(historyFile, 'utf-8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
   } catch { return []; }
 });
 
-ipcMain.handle('save-history', (_event, history) => {
-  return fs.writeFile(historyFile, JSON.stringify(history), 'utf-8');
+ipcMain.handle('save-history', async (_event, history) => {
+  try {
+    const safeHistory = Array.isArray(history) ? history : [];
+    await fs.writeFile(historyFile, JSON.stringify(safeHistory), 'utf-8');
+    return { success: true };
+  } catch (error) {
+    console.error('[save-history]', error);
+    return { success: false, error: errorMessage(error) };
+  }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(createWindow).catch((error) => {
+  console.error('[app.whenReady]', error);
+  app.quit();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

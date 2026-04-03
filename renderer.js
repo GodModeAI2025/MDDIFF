@@ -37,7 +37,25 @@ function el(prefix, side) { return els[`${prefix}${cap(side)}`]; }
 function basename(p) { return p ? p.split('/').pop() : null; }
 
 function escapeHtml(t) {
-  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(t)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeAttr(value) {
+  return String(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function sanitizeUrl(value, { allowDataImage = false } = {}) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('vbscript:')) return '';
+  if (lower.startsWith('data:') && !(allowDataImage && lower.startsWith('data:image/'))) return '';
+
+  return raw;
 }
 
 function insertTab(ta) {
@@ -75,9 +93,11 @@ els.themeToggle.addEventListener('click', () => {
 function renderMarkdown(md) {
   const codeBlocks = [];
   md = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    codeBlocks.push(`<pre><code class="lang-${lang}">${escapeHtml(code)}</code></pre>`);
+    const safeLang = escapeAttr(lang || '');
+    codeBlocks.push(`<pre><code class="lang-${safeLang}">${escapeHtml(code)}</code></pre>`);
     return `\x00CB${codeBlocks.length - 1}\x00`;
   });
+  md = escapeHtml(md);
 
   const lines = md.split('\n');
   const out = [];
@@ -105,8 +125,16 @@ function renderMarkdown(md) {
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+    const safeSrc = sanitizeUrl(src, { allowDataImage: true });
+    if (!safeSrc) return '';
+    return `<img alt="${escapeAttr(alt)}" src="${escapeAttr(safeSrc)}">`;
+  });
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, href) => {
+    const safeHref = sanitizeUrl(href);
+    if (!safeHref) return `<span>${text}</span>`;
+    return `<a href="${escapeAttr(safeHref)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  });
   html = html.replace(/^---+$/gm, '<hr>');
   html = html.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
   html = html.replace(/^[-*+]\s+(.+)$/gm, '<li>$1</li>');
@@ -572,7 +600,7 @@ els.historyBtn.addEventListener('click', (e) => {
 els.historyDropdown.addEventListener('click', async (e) => {
   const item = e.target.closest('.history-item');
   if (!item) return;
-  const entry = compareHistory[parseInt(item.dataset.index)];
+  const entry = compareHistory[parseInt(item.dataset.index, 10)];
   if (!entry) return;
   els.historyDropdown.classList.remove('open');
   await Promise.all(SIDES.map(async (side) => {
@@ -640,7 +668,6 @@ function scrollToLine(side, lineIndex) {
 
   // Gutter + Highlight synchronisieren
   el('gutter', side).scrollTop = editor.scrollTop;
-  el('highlight', side).style.transform = `translateY(${-editor.scrollTop}px)`;
 }
 
 /* ─── Delta Navigation ────────────────────────────────────────── */
@@ -720,7 +747,7 @@ document.querySelectorAll('.toc-dropdown').forEach(dropdown => {
   dropdown.addEventListener('click', (e) => {
     const item = e.target.closest('.toc-item');
     if (!item) return;
-    const lineIndex = parseInt(item.dataset.line);
+    const lineIndex = parseInt(item.dataset.line, 10);
     const side = dropdown.dataset.side;
     dropdown.classList.remove('open');
 
